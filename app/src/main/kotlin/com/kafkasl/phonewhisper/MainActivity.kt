@@ -113,7 +113,10 @@ class MainActivity : AppCompatActivity() {
             cloudSwitch.isChecked = newCloud
             refresh()
         }
-        root.addView(cloudRow)
+        // Cloud-only fork: the cloud switch and local models stay out of the screen, and
+        // any old "local" choice from an earlier version is reset.
+        prefs().edit().putBoolean("use_local", false).apply()
+        cloudRow.visibility = View.GONE
 
         cloudModelRow = settingsRow("Cloud model", "") { pickCloudModel() }
         cloudModelRowSub = cloudModelRow.findViewWithTag("subtitle")
@@ -144,33 +147,20 @@ class MainActivity : AppCompatActivity() {
         modelContainer = vertical(0)
         modelContainer.addView(sectionHeader("Local models"))
         for (m in MODEL_CATALOG) modelContainer.addView(buildModelRow(m))
-        root.addView(modelContainer)
+        // Not added to the screen: this fork doesn't ship the on-phone speech engine.
 
-        // --- Post-Processing Section ---
-        root.addView(sectionHeader("Post-Processing"))
-        
-        val isPostProcessing = prefs().getBoolean("use_post_processing", false)
-        val postProcessSwitch = MaterialSwitch(this).apply {
-            isChecked = isPostProcessing
-            isClickable = false
-        }
-        val postProcessRow = settingsRow("Cleanup transcript", "Off keeps your exact words. On sends the text to GPT-4o mini through OpenRouter to fix grammar", postProcessSwitch) {
-            val newVal = !postProcessSwitch.isChecked
-            prefs().edit().putBoolean("use_post_processing", newVal).apply()
-            postProcessSwitch.isChecked = newVal
-            refresh()
-        }
-        root.addView(postProcessRow)
+        // --- Post-Processing (removed from the screen) ---
+        // This fork never rewrites your words, so the cleanup option is gone and any
+        // earlier "on" setting is turned off. The views below are built but not shown.
+        prefs().edit().putBoolean("use_post_processing", false).apply()
 
         promptContainer = vertical(0)
         for (preset in promptPresets()) promptContainer.addView(buildPromptRow(preset))
-        root.addView(promptContainer)
 
         promptRow = settingsRow("Edit current prompt", currentPrompt()) { promptPostProcessing() }
         promptRowSub = promptRow.findViewWithTag("subtitle")
         promptRowSub.maxLines = 2
         promptRowSub.ellipsize = android.text.TextUtils.TruncateAt.END
-        root.addView(promptRow)
 
         // --- Settings Section ---
         root.addView(sectionHeader("Settings"))
@@ -552,8 +542,10 @@ class MainActivity : AppCompatActivity() {
             .setMessage("Paste your OpenRouter API key. It starts with sk-or-v1. Don't have one? Tap Get a key.")
             .setView(input.apply { setPadding(dp(24), dp(8), dp(24), dp(8)) })
             .setPositiveButton("Save") { _, _ ->
-                prefs().edit().putString("api_key", input.text.toString().trim()).apply()
+                val key = input.text.toString().trim()
+                prefs().edit().putString("api_key", key).apply()
                 refresh()
+                if (key.isNotEmpty()) verifyKey(key)
                 if (fromSetup) maybeRunSetup()
             }
             .setNeutralButton("Get a key") { _, _ ->
@@ -564,6 +556,27 @@ class MainActivity : AppCompatActivity() {
             }
             .show()
         if (fromSetup) setupDialog = dialog
+    }
+
+    /** Asks OpenRouter whether the saved key works, and says so either way. */
+    private fun verifyKey(key: String) {
+        keyRowSub.text = "Checking key..."
+        TranscriberClient.checkKey(key) { problem ->
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                refresh()
+                if (problem == null) {
+                    Toast.makeText(this, "Key works. OpenRouter accepted it.", Toast.LENGTH_SHORT).show()
+                } else {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Key problem")
+                        .setMessage(problem)
+                        .setPositiveButton("Fix key") { _, _ -> promptApiKey() }
+                        .setNegativeButton("Close", null)
+                        .show()
+                }
+            }
+        }
     }
 
     /**

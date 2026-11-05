@@ -18,9 +18,16 @@ Whisper Verbatim is a fork of [kafkasl/phone-whisper](https://github.com/kafkasl
 - **Setup walkthrough** for the microphone, the accessibility service (including Android's "restricted settings" step
   for apps installed outside the Play Store), and the API key.
 - **Transcription history**: kept for 24 hours by default, or forever if you turn that on. Tap an entry to copy it.
-- Cloud mode is the default, and the app is renamed Whisper Verbatim (package `com.isaacweber.whisperverbatim`),
-  so it installs alongside the original.
-- Local (on-phone) models aren't included in this fork's builds.
+- **Errors show on screen** next to the floating button (no key, wrong key, no internet, out of credit,
+  microphone busy, nothing heard), and the app checks your key with OpenRouter when you save it.
+- **Cloud-only**: the local (on-phone) models, the cloud on/off switch, and the AI "cleanup" option are removed,
+  since this fork never rewrites your words.
+- The app is renamed Whisper Verbatim (package `com.isaacweber.whisperverbatim`), so it installs alongside the original.
+
+### Install
+
+Download `WhisperVerbatim.apk` from the [latest release](https://github.com/isaacweber613/whisper-verbatim/releases/latest)
+and open it on your phone. The app walks you through the microphone, accessibility, and OpenRouter key setup.
 
 The original project's README follows.
 

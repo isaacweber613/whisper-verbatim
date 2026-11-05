@@ -236,6 +236,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             setTextColor(0xFFFFFFFF.toInt())
             setPadding((12 * dp).toInt(), (8 * dp).toInt(), (12 * dp).toInt(), (8 * dp).toInt())
             background = pill(COLOR_FEEDBACK_BG)
+            maxWidth = screenW - (32 * dp).toInt()
             alpha = 0f
             visibility = View.GONE
         }
@@ -309,10 +310,11 @@ class WhisperAccessibilityService : AccessibilityService() {
         feedbackParams: WindowManager.LayoutParams,
         bubbleParams: WindowManager.LayoutParams
     ) {
+        // Centered across the screen, just above the button, so longer messages never run off the edge.
         val margin = (MARGIN_DP * dp).toInt()
-        val offset = (FEEDBACK_OFFSET_DP * dp).toInt()
-        feedbackParams.x = maxOf(margin, bubbleParams.x - offset)
-        feedbackParams.y = maxOf(margin, bubbleParams.y - margin)
+        feedbackParams.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        feedbackParams.x = 0
+        feedbackParams.y = maxOf(margin, bubbleParams.y - (FEEDBACK_OFFSET_DP * dp).toInt())
     }
 
     private fun showFeedback(text: String, durationMs: Long = 2000) {
@@ -356,14 +358,14 @@ class WhisperAccessibilityService : AccessibilityService() {
         when (state) {
             State.IDLE -> startRecording()
             State.RECORDING -> stopAndTranscribe()
-            State.TRANSCRIBING -> {}
+            State.TRANSCRIBING -> toast("Still transcribing. One moment.")
         }
     }
 
     private fun startRecording() {
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            toast("Grant audio permission in Phone Whisper app"); return
+            toast("Microphone permission is off. Open Whisper Verbatim to turn it on."); return
         }
 
         val bufSize = AudioRecord.getMinBufferSize(
@@ -374,10 +376,19 @@ class WhisperAccessibilityService : AccessibilityService() {
                 MediaRecorder.AudioSource.MIC, SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize
             )
-        } catch (_: SecurityException) { toast("Audio permission denied"); return }
+        } catch (_: SecurityException) { toast("Microphone permission is off. Open Whisper Verbatim to turn it on."); return }
 
+        // Fails when another app (a call, a voice recorder) is holding the microphone.
+        val started = try {
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) false
+            else { audioRecord!!.startRecording(); true }
+        } catch (e: Exception) { false }
+        if (!started) {
+            audioRecord?.release(); audioRecord = null
+            toast("Couldn't start the microphone. Another app may be using it.")
+            return
+        }
         pcmStream = ByteArrayOutputStream()
-        audioRecord!!.startRecording()
         state = State.RECORDING
         setBusy(false)
         setAppearance(COLOR_RECORDING)
@@ -405,16 +416,12 @@ class WhisperAccessibilityService : AccessibilityService() {
         val pcm = pcmStream?.toByteArray() ?: ByteArray(0)
         pcmStream = null
 
-        if (pcm.isEmpty()) { reset("No audio captured"); return }
+        if (pcm.isEmpty()) { reset("No audio was recorded. Check that the microphone isn't in use by another app."); return }
+        // 16 kHz, 16-bit mono = 32,000 bytes per second
+        if (pcm.size < 32000 / 3) { reset("Recording too short. Tap, speak, then tap again."); return }
 
-        val useLocal = prefs().getBoolean("use_local", false)
-        val local = localTranscriber
-
-        if (useLocal && local != null) {
-            transcribeLocal(pcm, local)
-        } else {
-            transcribeApi(pcm)
-        }
+        // This fork is cloud-only; on-phone models aren't shipped.
+        transcribeApi(pcm)
     }
 
     private fun transcribeLocal(pcm: ByteArray, transcriber: LocalTranscriber) {
@@ -458,7 +465,7 @@ class WhisperAccessibilityService : AccessibilityService() {
                 handleTranscriptionResult(result.text)
             } else {
                 handler.post {
-                    toast("Error: ${result.error ?: "empty transcript"}")
+                    toast(result.error ?: "No words came back. Try speaking a little louder.")
                     state = State.IDLE
                     setBusy(false)
                     setAppearance(COLOR_IDLE)
@@ -706,5 +713,13 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     private fun prefs() = getSharedPreferences("phonewhisper", MODE_PRIVATE)
-    private fun toast(msg: String) { handler.post { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() } }
+    /**
+     * Shows a message next to the floating button. (Android hides Toast messages from
+     * background services on recent versions, which made errors silent, so messages use
+     * the app's own on-screen bubble instead.)
+     */
+    private fun toast(msg: String) {
+        Log.w(TAG, "Message to user: $msg")
+        showFeedback(msg, 4500)
+    }
 }
