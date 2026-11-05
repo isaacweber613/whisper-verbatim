@@ -81,8 +81,46 @@ class WhisperAccessibilityService : AccessibilityService() {
         thread { initLocalModel() }
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Windows (including the keyboard) opened, closed, or focus moved. Re-check
+        // after a short pause so a burst of events causes one update.
+        scheduleVisibilityUpdate()
+    }
     override fun onInterrupt() {}
+
+    // --- Show the button only while the keyboard is open ---
+
+    private val updateVisibility = Runnable { applyVisibility() }
+
+    private fun scheduleVisibilityUpdate() {
+        handler.removeCallbacks(updateVisibility)
+        handler.postDelayed(updateVisibility, 120)
+    }
+
+    /** True when the on-screen keyboard is showing, which means a text box has focus. */
+    private fun keyboardVisible(): Boolean = try {
+        windows?.any { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD } == true
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun applyVisibility() {
+        val overlay = overlayView ?: return
+        val params = layoutParams ?: return
+        // Never hide mid-recording or mid-transcription, even if the keyboard closes.
+        val show = state != State.IDLE || keyboardVisible()
+        val wasShown = overlay.visibility == View.VISIBLE
+        if (show == wasShown) return
+        overlay.visibility = if (show) View.VISIBLE else View.GONE
+        // A hidden window still catches taps unless it's marked not touchable.
+        params.flags = if (show) params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                       else params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        try {
+            (getSystemService(WINDOW_SERVICE) as WindowManager).updateViewLayout(overlay, params)
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't update overlay visibility", e)
+        }
+    }
 
     override fun onDestroy() {
         instance = null
@@ -217,6 +255,12 @@ class WhisperAccessibilityService : AccessibilityService() {
         feedbackView = feedback
         layoutParams = params
         feedbackLayoutParams = feedbackParams
+
+        // Start hidden; applyVisibility shows it once the keyboard is up.
+        overlay.visibility = View.GONE
+        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        wm.updateViewLayout(overlay, params)
+        scheduleVisibilityUpdate()
     }
 
     private fun removeOverlay() {
@@ -247,6 +291,8 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     private fun setAppearance(color: Int) {
         handler.post { button?.background = circle(color) }
+        // Every state change goes through here; once back to idle, hide again if the keyboard closed.
+        scheduleVisibilityUpdate()
     }
 
     private fun setBusy(visible: Boolean) {
@@ -357,7 +403,7 @@ class WhisperAccessibilityService : AccessibilityService() {
 
         if (pcm.isEmpty()) { reset("No audio captured"); return }
 
-        val useLocal = prefs().getBoolean("use_local", true)
+        val useLocal = prefs().getBoolean("use_local", false)
         val local = localTranscriber
 
         if (useLocal && local != null) {
@@ -399,9 +445,11 @@ class WhisperAccessibilityService : AccessibilityService() {
     private fun transcribeApi(pcm: ByteArray) {
         val wav = WavWriter.encode(pcm)
         val apiKey = prefs().getString("api_key", "") ?: ""
-        if (apiKey.isBlank()) { reset("Set API key in Phone Whisper app"); return }
+        if (apiKey.isBlank()) { reset("Set your OpenRouter API key in the Whisper Verbatim app"); return }
 
-        TranscriberClient.transcribe(wav, apiKey) { result ->
+        val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
+        val verbatim = prefs().getBoolean("verbatim", true)
+        TranscriberClient.transcribe(wav, apiKey, model, verbatim) { result ->
             if (result.text != null && result.text.isNotBlank()) {
                 handleTranscriptionResult(result.text)
             } else {
@@ -426,6 +474,15 @@ class WhisperAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Save your exact words to history (kept 24 hours, or forever if that's turned on).
+        try {
+            val model = if (prefs().getBoolean("use_local", false)) "local"
+                        else prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: ""
+            HistoryStore.add(this, text, model)
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't save to history", e)
+        }
+
         val usePostProcessing = prefs().getBoolean("use_post_processing", false)
         val apiKey = prefs().getString("api_key", "") ?: ""
 
@@ -448,7 +505,8 @@ class WhisperAccessibilityService : AccessibilityService() {
                     if (result.text != null && result.text.isNotBlank()) {
                         injectText(result.text)
                     } else {
-                        injectText(text, feedback = "Cleanup failed — raw copied to clipboard", feedbackDurationMs = 3000)
+                        injectText(text)
+                        showFeedback("Cleanup failed. Inserted your exact words.", 3000)
                     }
                     state = State.IDLE
                     setBusy(false)
@@ -474,31 +532,37 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     // --- Text injection ---
 
-    private fun injectText(
-        text: String,
-        feedback: String? = "Copied to clipboard",
-        feedbackDurationMs: Long = 2000
-    ) {
-        val clip = ClipData.newPlainText("phonewhisper", text)
-        (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
-        feedback?.let { showFeedback(it, feedbackDurationMs) }
-
+    /**
+     * Types the text straight into the focused box without touching the clipboard.
+     * Only when no box accepts typed text (for example, Termux's terminal) does it
+     * fall back to copying to the clipboard and pasting, and it says so on screen.
+     */
+    private fun injectText(text: String) {
         val candidates = findInjectionCandidates()
         Log.i(TAG, "Injecting text into ${candidates.size} candidate node(s)")
 
-        var injected = false
+        var typed = false
         try {
+            // First pass: set the text directly. No clipboard involved.
             for (candidate in candidates) {
-                if (tryInjectIntoNode(candidate, text)) {
-                    injected = true
-                    break
+                if (trySetText(candidate, text)) { typed = true; break }
+            }
+            // Second pass, only for boxes that refuse direct typing: clipboard + paste.
+            if (!typed) {
+                val clip = ClipData.newPlainText("Whisper Verbatim", text)
+                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+                var pasted = false
+                for (candidate in candidates) {
+                    if (tryPaste(candidate)) { pasted = true; break }
                 }
+                showFeedback(if (pasted) "Pasted (this box doesn't accept typed text)"
+                             else "Couldn't type here. Copied to clipboard", 3000)
             }
         } finally {
             candidates.forEach { it.recycle() }
         }
 
-        Log.i(TAG, if (injected) "Text injection action reported success" else "No injection action succeeded; clipboard fallback only")
+        Log.i(TAG, if (typed) "Text typed with ACTION_SET_TEXT" else "Fell back to clipboard")
     }
 
     private fun findInjectionCandidates(): List<AccessibilityNodeInfo> {
@@ -572,40 +636,54 @@ class WhisperAccessibilityService : AccessibilityService() {
         return score
     }
 
-    private fun tryInjectIntoNode(node: AccessibilityNodeInfo, text: String): Boolean {
+    /**
+     * Inserts the text at the cursor (or over the selected text) by setting the box's
+     * whole contents, then puts the cursor right after the new words.
+     */
+    private fun trySetText(node: AccessibilityNodeInfo, text: String): Boolean {
         logNode("Trying node", node)
+        if (!node.isEditable && node.className?.toString()?.contains("EditText") != true) return false
 
+        // An empty box reports its grey placeholder as its text; treat that as empty.
+        val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
+        val selStart = node.textSelectionStart
+        val selEnd = node.textSelectionEnd
+        val start = if (selStart in 0..current.length) selStart else current.length
+        val end = if (selEnd in 0..current.length) selEnd else start
+        val from = minOf(start, end)
+        val to = maxOf(start, end)
+
+        // Add a space when dictating right after a word, so two dictations don't run together.
+        val needsSpace = from > 0 && !current[from - 1].isWhitespace() && !text.first().isWhitespace()
+        val insert = if (needsSpace) " $text" else text
+        val updated = current.replaceRange(from, to, insert)
+
+        val args = Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, updated)
+        }
+        val ok = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        Log.i(TAG, "ACTION_SET_TEXT => $ok")
+        if (!ok) return false
+
+        val cursor = from + insert.length
+        node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursor)
+        })
+        return true
+    }
+
+    /** Fallback for boxes that won't take typed text: paste whatever is on the clipboard. */
+    private fun tryPaste(node: AccessibilityNodeInfo): Boolean {
         node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-
         findCustomPasteAction(node)?.let { action ->
             val ok = node.performAction(action.id)
             Log.i(TAG, "Custom action '${action.label}' (${action.id}) => $ok")
             if (ok) return true
         }
-
-        val pasteOk = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-        Log.i(TAG, "ACTION_PASTE => $pasteOk")
-        if (pasteOk) return true
-
-        if (node.isEditable || node.className?.toString()?.contains("EditText") == true) {
-            val current = node.text?.toString().orEmpty()
-            val start = if (node.textSelectionStart >= 0) node.textSelectionStart else current.length
-            val end = if (node.textSelectionEnd >= 0) node.textSelectionEnd else start
-            val replacementStart = minOf(start, end)
-            val replacementEnd = maxOf(start, end)
-            val updated = current.replaceRange(replacementStart, replacementEnd, text)
-            val args = Bundle().apply {
-                putCharSequence(
-                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    updated
-                )
-            }
-            val setTextOk = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            Log.i(TAG, "ACTION_SET_TEXT => $setTextOk")
-            if (setTextOk) return true
-        }
-
-        return false
+        val ok = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        Log.i(TAG, "ACTION_PASTE => $ok")
+        return ok
     }
 
     private fun findCustomPasteAction(node: AccessibilityNodeInfo): AccessibilityNodeInfo.AccessibilityAction? =

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- typeWindowsChanged + flagRetrieveInteractiveWindows let the service see when the
+     keyboard window opens or closes, so the button shows only while you're typing. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeViewFocused"
+    android:accessibilityEventTypes="typeViewFocused|typeWindowsChanged|typeWindowStateChanged"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canRetrieveWindowContent="true"
     android:notificationTimeout="100"

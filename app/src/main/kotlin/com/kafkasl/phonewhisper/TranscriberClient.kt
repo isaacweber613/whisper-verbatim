@@ -1,38 +1,99 @@
 package com.kafkasl.phonewhisper
 
+import android.util.Base64
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
+/**
+ * Sends recorded audio to OpenRouter's speech-to-text endpoint and returns the
+ * transcript exactly as the model wrote it. No cleanup or rewording happens here.
+ */
 object TranscriberClient {
     data class Result(val text: String?, val error: String?)
+    data class CloudModel(
+        val id: String,
+        val name: String,
+        val company: String,
+        val price: String,
+        val details: String
+    ) {
+        val title get() = "$name ($company)"
+    }
 
-    private val client = OkHttpClient()
+    const val DEFAULT_MODEL = "microsoft/mai-transcribe-2"
+
+    val CLOUD_MODELS = listOf(
+        CloudModel("microsoft/mai-transcribe-2", "MAI-Transcribe 2", "Microsoft", "\$0.10/hour",
+            "Most accurate of the three (2.0% word errors on the Artificial Analysis benchmark) and the fastest, " +
+            "about half a second per clip. Has its own verbatim switch, which Verbatim mode turns on.\n\n" +
+            "Still a preview. The \$0.10/hour price is a launch promotion through December 31, 2026."),
+        CloudModel("mistralai/voxtral-mini-transcribe-3-0", "Voxtral Mini Transcribe 3", "Mistral", "\$0.21/hour",
+            "Close second on accuracy (2.2% word errors) and about as fast, around half a second to 1 second per clip. " +
+            "Kept every \"um\" and repeated word in testing. Released October 2026."),
+        CloudModel("elevenlabs/scribe-v2", "Scribe v2", "ElevenLabs", "\$0.22/hour",
+            "Close second on accuracy (2.2% word errors) but slower, about 1.5 seconds per clip. " +
+            "Verbatim by default. Writes times with :00, so \"six\" becomes \"6:00.\"")
+    )
+
+    /** Shown in the app for a model ID: the friendly name for a built-in model, the raw ID for a custom one. */
+    fun titleFor(id: String) = CLOUD_MODELS.firstOrNull { it.id == id }?.title ?: id
+
+    fun summaryFor(id: String) = CLOUD_MODELS.firstOrNull { it.id == id }
+        ?.let { "${it.title} · ${it.price}" } ?: "Custom: $id"
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(70, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
 
     fun parseResponse(json: String): Result = try {
         val obj = JSONObject(json)
         when {
             obj.has("text") -> Result(obj.getString("text"), null)
-            obj.has("error") -> Result(null, obj.getJSONObject("error").getString("message"))
+            obj.has("error") -> Result(null, obj.getJSONObject("error").optString("message", "Unknown error"))
             else -> Result(null, "Unknown response")
         }
     } catch (e: Exception) {
         Result(null, e.message ?: "Parse error")
     }
 
-    fun transcribe(wavData: ByteArray, apiKey: String, callback: (Result) -> Unit) {
-        val body = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("model", "whisper-1")
-            .addFormDataPart("file", "audio.wav", wavData.toRequestBody("audio/wav".toMediaType()))
-            .build()
+    /**
+     * Provider-specific settings that make each provider keep fillers ("um", "uh"),
+     * repeats, and false starts. OpenRouter forwards only the block for the provider
+     * that serves the request, so listing several is safe.
+     */
+    private fun verbatimOptions(): JSONObject = JSONObject()
+        // Microsoft (MAI-Transcribe): verbatim vs clean style switch
+        .put("azure", JSONObject().put("enhancedMode",
+            JSONObject().put("modelOptions", JSONObject().put("transcribeStyle", "verbatim"))))
+        // ElevenLabs (Scribe): verbatim is its default; make it explicit
+        .put("elevenlabs", JSONObject().put("no_verbatim", false))
+        // Deepgram (Nova): strips "uh" and "um" unless asked to keep them
+        .put("deepgram", JSONObject().put("filler_words", true))
+        // AssemblyAI (Universal): removes fillers unless disfluencies is on
+        .put("assemblyai", JSONObject().put("disfluencies", true))
 
+    /** With verbatim off, no provider options are sent and each model uses its own default. */
+    fun buildBody(wavData: ByteArray, model: String, verbatim: Boolean): String {
+        val b64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
+        val body = JSONObject()
+            .put("model", model)
+            .put("input_audio", JSONObject().put("data", b64).put("format", "wav"))
+        if (verbatim) body.put("provider", JSONObject().put("options", verbatimOptions()))
+        return body.toString()
+    }
+
+    fun transcribe(wavData: ByteArray, apiKey: String, model: String, verbatim: Boolean, callback: (Result) -> Unit) {
         val request = Request.Builder()
-            .url("https://api.openai.com/v1/audio/transcriptions")
+            .url("https://openrouter.ai/api/v1/audio/transcriptions")
             .header("Authorization", "Bearer $apiKey")
-            .post(body)
+            .header("X-Title", "Phone Whisper Verbatim")
+            .post(buildBody(wavData, model, verbatim).toRequestBody("application/json".toMediaType()))
             .build()
 
         client.newCall(request).enqueue(object : Callback {

@@ -28,10 +28,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioRowSub: TextView
     private lateinit var accRowSub: TextView
     private lateinit var keyRowSub: TextView
+    private lateinit var cloudModelRow: LinearLayout
+    private lateinit var cloudModelRowSub: TextView
+    private lateinit var verbatimRow: LinearLayout
+    private lateinit var historyRowSub: TextView
     private lateinit var promptRowSub: TextView
     private lateinit var promptRow: LinearLayout
     private lateinit var modelContainer: LinearLayout
     private lateinit var promptContainer: LinearLayout
+
+    // Setup walkthrough state
+    private var setupDialog: android.app.AlertDialog? = null
+    private var setupSnoozed = false
+    private var audioAsked = false
+    private var setupWasIncomplete = false
 
     private val modelRows = mutableMapOf<String, ModelRowViews>()
     private val promptRows = mutableMapOf<String, PromptRowViews>()
@@ -55,14 +65,17 @@ class MainActivity : AppCompatActivity() {
 
         // Top large header (like "Connected devices")
         val header = TextView(this).apply {
-            text = "Phone Whisper"
+            text = "Whisper Verbatim"
             textSize = 32f
             setPadding(dp(24), dp(64), dp(24), dp(24))
         }
         root.addView(header)
 
-        // Status row
-        val statusRow = settingsRow("Status", "Checking...")
+        // Status row: tapping it restarts the setup walkthrough
+        val statusRow = settingsRow("Status", "Checking...") {
+            setupSnoozed = false
+            maybeRunSetup()
+        }
         statusSubtitle = statusRow.findViewWithTag("subtitle")
         root.addView(statusRow)
 
@@ -78,26 +91,53 @@ class MainActivity : AppCompatActivity() {
         root.addView(audioRow)
 
         val accRow = settingsRow("Accessibility service", "Checking...") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            setupSnoozed = false
+            if (WhisperAccessibilityService.instance == null) showAccessibilityStep()
+            else openAccessibilitySettings()
         }
         accRowSub = accRow.findViewWithTag("subtitle")
         root.addView(accRow)
 
         // --- Engine Section ---
         
-        val isCloud = !prefs().getBoolean("use_local", true)
+        val isCloud = !prefs().getBoolean("use_local", false)
         
         val cloudSwitch = MaterialSwitch(this).apply {
             isChecked = isCloud
             isClickable = false
         }
-        val cloudRow = settingsRow("Use cloud transcription", "Requires OpenAI API key", cloudSwitch) {
+        val cloudRow = settingsRow("Use cloud transcription", "Requires OpenRouter API key", cloudSwitch) {
             val newCloud = !cloudSwitch.isChecked
             prefs().edit().putBoolean("use_local", !newCloud).apply()
             cloudSwitch.isChecked = newCloud
             refresh()
         }
         root.addView(cloudRow)
+
+        cloudModelRow = settingsRow("Cloud model", "") { pickCloudModel() }
+        cloudModelRowSub = cloudModelRow.findViewWithTag("subtitle")
+        root.addView(cloudModelRow)
+
+        val verbatimSwitch = MaterialSwitch(this).apply {
+            isChecked = prefs().getBoolean("verbatim", true)
+            isClickable = false
+        }
+        verbatimRow = settingsRow("Verbatim mode",
+            "On: asks the model to keep \"um,\" \"uh,\" repeats, and false starts. Off: the model's own default, which may tidy them up",
+            verbatimSwitch) {
+            val newVal = !verbatimSwitch.isChecked
+            prefs().edit().putBoolean("verbatim", newVal).apply()
+            verbatimSwitch.isChecked = newVal
+        }
+        root.addView(verbatimRow)
+
+        // --- History ---
+        root.addView(sectionHeader("History"))
+        val historyRow = settingsRow("Transcription history", "") {
+            startActivity(Intent(this, HistoryActivity::class.java))
+        }
+        historyRowSub = historyRow.findViewWithTag("subtitle")
+        root.addView(historyRow)
 
         // Local Models section
         modelContainer = vertical(0)
@@ -113,7 +153,7 @@ class MainActivity : AppCompatActivity() {
             isChecked = isPostProcessing
             isClickable = false
         }
-        val postProcessRow = settingsRow("Cleanup transcript", "Uses OpenAI Chat API to fix grammar and punctuation", postProcessSwitch) {
+        val postProcessRow = settingsRow("Cleanup transcript", "Off keeps your exact words. On sends the text to GPT-4o mini through OpenRouter to fix grammar", postProcessSwitch) {
             val newVal = !postProcessSwitch.isChecked
             prefs().edit().putBoolean("use_post_processing", newVal).apply()
             postProcessSwitch.isChecked = newVal
@@ -134,7 +174,7 @@ class MainActivity : AppCompatActivity() {
         // --- Settings Section ---
         root.addView(sectionHeader("Settings"))
         
-        val keyRow = settingsRow("OpenAI API Key", "Tap to set") { promptApiKey() }
+        val keyRow = settingsRow("OpenRouter API Key", "Tap to set") { promptApiKey() }
         keyRowSub = keyRow.findViewWithTag("subtitle")
         root.addView(keyRow)
 
@@ -143,16 +183,146 @@ class MainActivity : AppCompatActivity() {
             addView(root)
         })
 
-        if (!hasPerm(Manifest.permission.RECORD_AUDIO)) {
-            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
-        }
-        
+        // The setup walkthrough (maybeRunSetup) asks for the microphone, so no request here.
         refresh()
     }
 
-    override fun onResume() { super.onResume(); refresh() }
+    override fun onResume() { super.onResume(); refresh(); maybeRunSetup() }
     override fun onRequestPermissionsResult(c: Int, p: Array<String>, r: IntArray) {
-        super.onRequestPermissionsResult(c, p, r); refresh()
+        super.onRequestPermissionsResult(c, p, r); refresh(); maybeRunSetup()
+    }
+
+    // --- Setup walkthrough ---
+
+    /** What's still missing, in the order the walkthrough asks for it. */
+    private enum class SetupStep { MIC, ACCESSIBILITY, API_KEY, DONE }
+
+    private fun nextSetupStep(): SetupStep {
+        val useLocal = prefs().getBoolean("use_local", false)
+        val usePostProcessing = prefs().getBoolean("use_post_processing", false)
+        val hasKey = !prefs().getString("api_key", "").isNullOrBlank()
+        return when {
+            !hasPerm(Manifest.permission.RECORD_AUDIO) -> SetupStep.MIC
+            WhisperAccessibilityService.instance == null -> SetupStep.ACCESSIBILITY
+            (!useLocal || usePostProcessing) && !hasKey -> SetupStep.API_KEY
+            else -> SetupStep.DONE
+        }
+    }
+
+    /**
+     * Shows the next setup step as a dialog. Runs every time the app comes back to the
+     * front, so after the person turns something on in Android settings and returns,
+     * the next step appears on its own. "Later" stops it until the app is reopened
+     * or the Status row is tapped.
+     */
+    private fun maybeRunSetup() {
+        if (isFinishing || setupSnoozed || setupDialog?.isShowing == true) return
+        val step = nextSetupStep()
+        if (step == SetupStep.DONE) {
+            if (setupWasIncomplete) {
+                setupWasIncomplete = false
+                Toast.makeText(this, "Setup complete. Tap the floating dot in any app to dictate.", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        setupWasIncomplete = true
+        when (step) {
+            SetupStep.MIC -> showMicStep()
+            SetupStep.ACCESSIBILITY -> showAccessibilityStep()
+            SetupStep.API_KEY -> promptApiKey(fromSetup = true)
+            SetupStep.DONE -> Unit
+        }
+    }
+
+    private fun setupBuilder(stepNumber: Int, title: String) =
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Step $stepNumber of 2: $title")
+            .setCancelable(false)
+
+    /**
+     * Microphone: asks with Android's own prompt the moment the app opens, with no
+     * dialog of ours first. After a "Don't allow", a dialog offers to ask again, or
+     * sends the person to App info once Android refuses to show its prompt.
+     */
+    private fun showMicStep() {
+        if (!audioAsked) {
+            audioAsked = true
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+            return
+        }
+        // Denied this session. Android shows its own prompt again only if it still allows asking.
+        val canAskAgain = ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.RECORD_AUDIO)
+        setupDialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Microphone needed")
+            .setMessage(
+                if (canAskAgain) "Whisper Verbatim needs the microphone to record what you say. Tap Ask again and choose \"While using the app.\""
+                else "Whisper Verbatim needs the microphone to record what you say. Android won't ask again, so tap Open App info, tap Permissions, tap Microphone, and choose \"Allow only while using the app.\"")
+            .setCancelable(false)
+            .setPositiveButton(if (canAskAgain) "Ask again" else "Open App info") { _, _ ->
+                if (canAskAgain) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+                else openAppInfo()
+            }
+            .setNegativeButton("Later") { _, _ -> setupSnoozed = true }
+            .show()
+    }
+
+    /**
+     * Accessibility, in the order Android forces on sideloaded apps:
+     *   1. Accessibility settings: try to turn it on (Android blocks it as a "restricted setting").
+     *   2. App info: three-dot menu, Allow restricted settings.
+     *   3. Accessibility settings again: turn it on for real.
+     * The phase is saved, so each return to the app shows the next part. If the
+     * service turns on at any point (some phones never block it), the walkthrough moves on.
+     */
+    private fun showAccessibilityStep() {
+        val phase = prefs().getInt("acc_setup_phase", 0)
+        val b = setupBuilder(1, "Accessibility (part ${phase + 1} of 3)")
+        when (phase) {
+            0 -> b.setMessage(
+                    "Whisper Verbatim uses Android's accessibility service for one thing: typing your dictated text into the box you're in.\n\n" +
+                    "Tap Open Accessibility, then try to turn on Whisper Verbatim. Android will probably block it with a \"Restricted setting\" message, because the app didn't come from the Play Store. That's expected. Come back here after.")
+                .setPositiveButton("Open Accessibility") { _, _ ->
+                    setAccPhase(1); openAccessibilitySettings()
+                }
+            1 -> b.setMessage(
+                    "Now unblock it. Tap Open App info, tap the three-dot menu at the top right, tap Allow restricted settings, and confirm with your fingerprint or PIN. Then come back here.")
+                .setPositiveButton("Open App info") { _, _ ->
+                    setAccPhase(2); openAppInfo()
+                }
+                .setNeutralButton("It wasn't blocked") { _, _ ->
+                    setAccPhase(2); openAccessibilitySettings()
+                }
+            else -> b.setMessage(
+                    "Last part. Tap Open Accessibility and turn on Whisper Verbatim.\n\n" +
+                    "If it's still blocked, tap App info and allow restricted settings again.")
+                .setPositiveButton("Open Accessibility") { _, _ -> openAccessibilitySettings() }
+                .setNeutralButton("App info") { _, _ -> openAppInfo() }
+        }
+        setupDialog = b.setNegativeButton("Later") { _, _ -> setupSnoozed = true }.show()
+    }
+
+    private fun setAccPhase(phase: Int) = prefs().edit().putInt("acc_setup_phase", phase).apply()
+
+    /**
+     * Opens Android's accessibility list with Whisper Verbatim highlighted. (Jumping straight
+     * to the app's own page needs a permission only system apps get, so the list is as close as
+     * a regular app can go.)
+     */
+    private fun openAccessibilitySettings() {
+        val key = android.content.ComponentName(this, WhisperAccessibilityService::class.java).flattenToString()
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .putExtra(":settings:fragment_args_key", key)
+            .putExtra(":settings:show_fragment_args", Bundle().apply { putString(":settings:fragment_args_key", key) })
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't open Accessibility settings. Open Settings, then Accessibility.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openAppInfo() {
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            android.net.Uri.fromParts("package", packageName, null)))
     }
 
     // --- Model Rows ---
@@ -306,7 +476,7 @@ class MainActivity : AppCompatActivity() {
     private fun refresh() {
         val audio = hasPerm(Manifest.permission.RECORD_AUDIO)
         val acc = WhisperAccessibilityService.instance != null
-        val useLocal = prefs().getBoolean("use_local", true)
+        val useLocal = prefs().getBoolean("use_local", false)
         val usePostProcessing = prefs().getBoolean("use_post_processing", false)
         val hasKey = !prefs().getString("api_key", "").isNullOrBlank()
         val hasModel = LocalTranscriber.availableModels(this).isNotEmpty()
@@ -315,13 +485,20 @@ class MainActivity : AppCompatActivity() {
         accRowSub.text = if (acc) "Enabled" else "Tap to enable in settings"
 
         modelContainer.visibility = if (useLocal) View.VISIBLE else View.GONE
+        cloudModelRow.visibility = if (useLocal) View.GONE else View.VISIBLE
+        verbatimRow.visibility = if (useLocal) View.GONE else View.VISIBLE
+        val historyCount = HistoryStore.all(this).size
+        val keepForever = prefs().getBoolean("keep_history_forever", false)
+        historyRowSub.text = "$historyCount saved · " + (if (keepForever) "kept forever" else "kept 24 hours") + ". Tap to view and copy"
+        cloudModelRowSub.text = TranscriberClient.summaryFor(
+            prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL)
         promptContainer.visibility = if (usePostProcessing) View.VISIBLE else View.GONE
         promptRow.visibility = if (usePostProcessing) View.VISIBLE else View.GONE
 
         val apiKey = prefs().getString("api_key", "") ?: ""
         keyRowSub.text = if (apiKey.isBlank()) "Tap to set" 
-                         else if (apiKey.length > 7) "sk-...${apiKey.takeLast(4)}" 
-                         else "sk-...***"
+                         else if (apiKey.length > 7) "${apiKey.take(6)}...${apiKey.takeLast(4)}" 
+                         else "Set"
 
         val prompt = currentPrompt()
         promptRowSub.text = prompt
@@ -338,27 +515,154 @@ class MainActivity : AppCompatActivity() {
         val postReady = !usePostProcessing || hasKey
         val ready = audio && acc && (localReady || cloudReady) && postReady
 
-        statusSubtitle.text = if (ready) "Ready — tap the overlay dot to dictate" else "Setup required"
+        statusSubtitle.text = if (ready) "Ready. Tap the floating dot in any app to dictate" else "Setup required. Tap here to continue"
         statusSubtitle.setTextColor(if (ready) attrColor(com.google.android.material.R.attr.colorPrimary) else attrColor(android.R.attr.textColorSecondary))
         
         refreshAllCards()
         refreshPromptRows()
     }
 
-    private fun promptApiKey() {
+    private fun promptApiKey(fromSetup: Boolean = false) {
         val input = EditText(this).apply {
-            hint = "sk-..."
+            hint = "sk-or-v1-..."
+            isSingleLine = true
             setText(prefs().getString("api_key", ""))
         }
-        android.app.AlertDialog.Builder(this)
-            .setTitle("OpenAI API Key")
+        val builder = if (fromSetup) setupBuilder(2, "OpenRouter API key")
+                      else android.app.AlertDialog.Builder(this).setTitle("OpenRouter API Key")
+        val dialog = builder
+            .setMessage("Paste your OpenRouter API key. It starts with sk-or-v1. Don't have one? Tap Get a key.")
             .setView(input.apply { setPadding(dp(24), dp(8), dp(24), dp(8)) })
             .setPositiveButton("Save") { _, _ ->
                 prefs().edit().putString("api_key", input.text.toString().trim()).apply()
                 refresh()
+                if (fromSetup) maybeRunSetup()
+            }
+            .setNeutralButton("Get a key") { _, _ ->
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://openrouter.ai/keys")))
+            }
+            .setNegativeButton(if (fromSetup) "Later" else "Cancel") { _, _ ->
+                if (fromSetup) setupSnoozed = true
+            }
+            .show()
+        if (fromSetup) setupDialog = dialog
+    }
+
+    /**
+     * Model picker: each row shows the name, company, and price, plus an (i) button
+     * for the details. The last row takes any OpenRouter model ID you paste.
+     */
+    private fun pickCloudModel() {
+        val current = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
+        val isCustom = TranscriberClient.CLOUD_MODELS.none { it.id == current }
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(8))
+        }
+        var dialog: android.app.AlertDialog? = null
+
+        fun row(title: String, subtitle: String, selected: Boolean, info: String?, onPick: () -> Unit): View {
+            val radio = MaterialRadioButton(this).apply {
+                isChecked = selected
+                isClickable = false
+                buttonTintList = ColorStateList.valueOf(attrColor(com.google.android.material.R.attr.colorPrimary))
+            }
+            val texts = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(this@MainActivity).apply { text = title; textSize = 16f })
+                addView(TextView(this@MainActivity).apply {
+                    text = subtitle; textSize = 13f
+                    setTextColor(attrColor(android.R.attr.textColorSecondary))
+                })
+            }
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(16), dp(10), dp(8), dp(10))
+                isClickable = true
+                background = selectableBackground()
+                setOnClickListener { onPick() }
+                addView(radio)
+                addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                if (info != null) {
+                    addView(TextView(this@MainActivity).apply {
+                        text = "ⓘ"
+                        textSize = 22f
+                        gravity = Gravity.CENTER
+                        setTextColor(attrColor(com.google.android.material.R.attr.colorPrimary))
+                        setPadding(dp(12), dp(4), dp(12), dp(4))
+                        isClickable = true
+                        background = selectableBackground()
+                        contentDescription = "About $title"
+                        setOnClickListener {
+                            android.app.AlertDialog.Builder(this@MainActivity)
+                                .setTitle(title)
+                                .setMessage(info)
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    })
+                }
+            }
+        }
+
+        for (m in TranscriberClient.CLOUD_MODELS) {
+            list.addView(row(m.title, m.price, m.id == current, m.details) {
+                prefs().edit().putString("cloud_model", m.id).apply()
+                dialog?.dismiss(); refresh()
+            })
+        }
+        list.addView(row("Custom OpenRouter model",
+            if (isCustom) current else "Paste any model ID", isCustom,
+            "Use any speech-to-text model on OpenRouter. Copy its ID from the model's OpenRouter page " +
+            "(for example, openai/gpt-transcribe) and paste it here.\n\n" +
+            "Verbatim mode sends a keep-everything setting to Microsoft, ElevenLabs, and AssemblyAI models. " +
+            "Other models use their own default. In testing, Mistral and AssemblyAI kept \"um\" and \"uh\" anyway, " +
+            "while Deepgram removed them no matter what.") {
+            dialog?.dismiss(); promptCustomModel()
+        })
+
+        dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Cloud model")
+            .setView(ScrollView(this).apply { addView(list) })
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun promptCustomModel() {
+        val current = prefs().getString("cloud_model", "") ?: ""
+        val input = EditText(this).apply {
+            hint = "provider/model-name"
+            isSingleLine = true
+            if (TranscriberClient.CLOUD_MODELS.none { it.id == current }) setText(current)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Custom OpenRouter model")
+            .setMessage("Paste the model's ID from OpenRouter, for example openai/gpt-transcribe.")
+            .setView(input.apply { setPadding(dp(24), dp(8), dp(24), dp(8)) })
+            .setPositiveButton("Save") { _, _ ->
+                // Accept a pasted page link too: keep only the "provider/model" part.
+                val id = input.text.toString().trim()
+                    .removePrefix("https://").removePrefix("openrouter.ai/").trim('/')
+                if (id.contains('/')) {
+                    prefs().edit().putString("cloud_model", id).apply()
+                    refresh()
+                } else {
+                    Toast.makeText(this, "That doesn't look like a model ID. It should look like provider/model-name.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNeutralButton("Browse models") { _, _ ->
+                startActivity(Intent(Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://openrouter.ai/collections/speech-to-text-models")))
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun selectableBackground(): android.graphics.drawable.Drawable? {
+        val tv = TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+        return ContextCompat.getDrawable(this, tv.resourceId)
     }
 
     private fun promptPostProcessing() {
