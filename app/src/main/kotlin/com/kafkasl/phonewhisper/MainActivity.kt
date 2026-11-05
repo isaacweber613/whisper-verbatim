@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var setupSnoozed = false
     private var audioAsked = false
     private var setupWasIncomplete = false
+    private var setupDialogStep: SetupStep? = null
 
     private val modelRows = mutableMapOf<String, ModelRowViews>()
     private val promptRows = mutableMapOf<String, PromptRowViews>()
@@ -187,7 +188,17 @@ class MainActivity : AppCompatActivity() {
         refresh()
     }
 
-    override fun onResume() { super.onResume(); refresh(); maybeRunSetup() }
+    override fun onResume() {
+        super.onResume()
+        // The service can finish turning on a moment after you return from Settings; update when it does.
+        WhisperAccessibilityService.onStateChanged = { refresh(); maybeRunSetup() }
+        refresh(); maybeRunSetup()
+    }
+
+    override fun onPause() {
+        WhisperAccessibilityService.onStateChanged = null
+        super.onPause()
+    }
     override fun onRequestPermissionsResult(c: Int, p: Array<String>, r: IntArray) {
         super.onRequestPermissionsResult(c, p, r); refresh(); maybeRunSetup()
     }
@@ -216,8 +227,15 @@ class MainActivity : AppCompatActivity() {
      * or the Status row is tapped.
      */
     private fun maybeRunSetup() {
-        if (isFinishing || setupSnoozed || setupDialog?.isShowing == true) return
+        if (isFinishing || setupSnoozed) return
         val step = nextSetupStep()
+        // A dialog for this same step is already up: leave it. If the person finished that
+        // step some other way (say, turned accessibility on by hand), swap in the next one.
+        if (setupDialog?.isShowing == true) {
+            if (step == setupDialogStep) return
+            setupDialog?.dismiss()
+        }
+        setupDialogStep = step
         if (step == SetupStep.DONE) {
             if (setupWasIncomplete) {
                 setupWasIncomplete = false

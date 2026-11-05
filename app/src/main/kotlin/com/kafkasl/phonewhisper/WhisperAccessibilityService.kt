@@ -33,6 +33,8 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     companion object {
         var instance: WhisperAccessibilityService? = null
+        /** Called on the main thread when the service turns on or off, so the open app can update right away. */
+        var onStateChanged: (() -> Unit)? = null
         private const val TAG = "PhoneWhisper"
         private const val SAMPLE_RATE = 16000
         private const val BTN_DP = 44
@@ -76,6 +78,7 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         instance = this
+        handler.post { onStateChanged?.invoke() }
         showOverlay()
         // Try to load local model in background
         thread { initLocalModel() }
@@ -124,6 +127,7 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         instance = null
+        handler.post { onStateChanged?.invoke() }
         removeOverlay()
         super.onDestroy()
     }
