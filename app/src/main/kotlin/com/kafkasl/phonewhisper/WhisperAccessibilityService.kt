@@ -53,6 +53,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         private const val COLOR_RETRY = 0xDDF59E0B.toInt()
         private const val COLOR_FEEDBACK_BG = 0xEE1C1C1E.toInt()
         private const val COLOR_RING = 0xFFE8EAED.toInt()
+        private const val NO_WORDS = "No words came back. Try speaking a little louder."
 
         /** WhatsApp's message box doesn't always flag its "Message" placeholder. */
         private val BUILT_IN_PLACEHOLDERS = setOf(
@@ -664,12 +665,25 @@ class WhisperAccessibilityService : AccessibilityService() {
                         showFeedback("${TranscriberClient.titleFor(model)} was unavailable. Used ${TranscriberClient.titleFor(backup)}.", 4000)
                         handleTranscriptionResult(second.text, backup)
                     } else {
-                        failWithRetry(pcm, result.error ?: "No words came back. Try speaking a little louder.")
+                        failTranscription(pcm, if (second.error == null && second.text != null) second else result)
                     }
                 }
             } else {
-                failWithRetry(pcm, result.error ?: "No words came back. Try speaking a little louder.")
+                failTranscription(pcm, result)
             }
+        }
+    }
+
+    /**
+     * When the model answered but heard no words, sending the same audio again gives the same
+     * empty answer, so the button goes back to the mic and a tap starts a new recording.
+     * Other failures (network, server) keep the recording for a retry.
+     */
+    private fun failTranscription(pcm: ByteArray, result: TranscriberClient.Result) {
+        if (result.error == null && result.text != null) {
+            handler.post { reset(NO_WORDS) }
+        } else {
+            failWithRetry(pcm, result.error ?: NO_WORDS)
         }
     }
 

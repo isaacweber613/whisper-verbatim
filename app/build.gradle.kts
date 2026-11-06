@@ -19,8 +19,8 @@ android {
         applicationId = "com.isaacweber.wordforword"
         minSdk = 22
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.7.6"
+        versionCode = 24
+        versionName = "0.7.7"
 
         ndk { abiFilters += "arm64-v8a" }
     }
