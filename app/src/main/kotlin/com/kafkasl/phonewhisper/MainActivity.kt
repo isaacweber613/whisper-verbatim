@@ -329,16 +329,11 @@ class MainActivity : AppCompatActivity() {
      * service: what the app can see, what it does with it, and an explicit Agree button.
      */
     private fun showAccessibilityDisclosure() {
-        setupDialog = setupBuilder(1, "How Word for Word uses Accessibility")
+        setupDialog = setupBuilder(1, "Accessibility")
             .setMessage(
-                "Word for Word uses Android's Accessibility service to do two things:\n\n" +
-                "• Show the floating dictation button while your keyboard is open.\n" +
-                "• Type your dictated words into the text box you're in.\n\n" +
-                "To do this, the app looks at the text box you're in and the text already in it, so it can add your words at the cursor " +
-                "and skip grey placeholder text like \"Message.\" It looks only when you tap into a text box or tap the floating button.\n\n" +
-                "Word for Word doesn't save, collect, or share anything it reads on your screen. " +
-                "Your recording goes only to the transcription service you set up (OpenRouter), using your own API key.\n\n" +
-                "Tap Agree to continue to Android's Accessibility settings.")
+                "Word for Word uses Accessibility to show the mic button and type your words into the text box you're in. " +
+                "It reads only that text box, and never saves or shares it. " +
+                "Your recording goes only to OpenRouter, with your own key.")
             .setPositiveButton("Agree") { _, _ ->
                 prefs().edit().putBoolean("acc_disclosure_agreed", true).apply()
                 showAccessibilityStep()
@@ -636,7 +631,8 @@ class MainActivity : AppCompatActivity() {
         }
         var dialog: android.app.AlertDialog? = null
 
-        fun row(title: String, subtitle: String, selected: Boolean, info: String?, onPick: () -> Unit): View {
+        fun row(title: String, subtitle: String, selected: Boolean, info: String?,
+                onDelete: (() -> Unit)? = null, onPick: () -> Unit): View {
             val radio = MaterialRadioButton(this).apply {
                 isChecked = selected
                 isClickable = false
@@ -678,6 +674,19 @@ class MainActivity : AppCompatActivity() {
                         }
                     })
                 }
+                if (onDelete != null) {
+                    addView(TextView(this@MainActivity).apply {
+                        text = "✕"
+                        textSize = 18f
+                        gravity = Gravity.CENTER
+                        setTextColor(attrColor(android.R.attr.textColorSecondary))
+                        setPadding(dp(14), dp(4), dp(14), dp(4))
+                        isClickable = true
+                        background = selectableBackground()
+                        contentDescription = "Delete $title"
+                        setOnClickListener { onDelete() }
+                    })
+                }
             }
         }
 
@@ -687,8 +696,19 @@ class MainActivity : AppCompatActivity() {
                 dialog?.dismiss(); refresh()
             })
         }
-        list.addView(row("Custom OpenRouter model",
-            if (isCustom) current else "Paste any model ID", isCustom,
+        // A custom model chosen before saved models existed still shows up, and is kept.
+        if (isCustom && current !in savedCustomModels()) setSavedCustomModels(savedCustomModels() + current)
+        for (id in savedCustomModels()) {
+            list.addView(row(id, "Custom model", id == current, null, onDelete = {
+                setSavedCustomModels(savedCustomModels() - id)
+                if (id == current) prefs().edit().putString("cloud_model", TranscriberClient.DEFAULT_MODEL).apply()
+                dialog?.dismiss(); refresh(); pickCloudModel()
+            }) {
+                prefs().edit().putString("cloud_model", id).apply()
+                dialog?.dismiss(); refresh()
+            })
+        }
+        list.addView(row("Add custom model", "Paste any OpenRouter model ID", false,
             "Use any speech-to-text model on OpenRouter. Copy its ID from the model's OpenRouter page " +
             "(for example, openai/gpt-transcribe) and paste it here.\n\n" +
             "Verbatim mode sends a keep-everything setting to Microsoft, ElevenLabs, and AssemblyAI models. " +
@@ -704,15 +724,20 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Custom model IDs the user added, in the order they were added. */
+    private fun savedCustomModels(): List<String> =
+        (prefs().getString("custom_models", "") ?: "").split('\n').filter { it.isNotBlank() }
+
+    private fun setSavedCustomModels(ids: List<String>) =
+        prefs().edit().putString("custom_models", ids.distinct().joinToString("\n")).apply()
+
     private fun promptCustomModel() {
-        val current = prefs().getString("cloud_model", "") ?: ""
         val input = EditText(this).apply {
             hint = "provider/model-name"
             isSingleLine = true
-            if (TranscriberClient.CLOUD_MODELS.none { it.id == current }) setText(current)
         }
         android.app.AlertDialog.Builder(this)
-            .setTitle("Custom OpenRouter model")
+            .setTitle("Add custom model")
             .setMessage("Paste the model's ID from OpenRouter, for example openai/gpt-transcribe.")
             .setView(input.apply { setPadding(dp(24), dp(8), dp(24), dp(8)) })
             .setPositiveButton("Save") { _, _ ->
@@ -720,6 +745,7 @@ class MainActivity : AppCompatActivity() {
                 val id = input.text.toString().trim()
                     .removePrefix("https://").removePrefix("openrouter.ai/").trim('/')
                 if (id.contains('/')) {
+                    if (TranscriberClient.CLOUD_MODELS.none { it.id == id }) setSavedCustomModels(savedCustomModels() + id)
                     prefs().edit().putString("cloud_model", id).apply()
                     refresh()
                 } else {
