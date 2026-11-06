@@ -17,7 +17,7 @@ android {
 
     defaultConfig {
         applicationId = "com.isaacweber.wordforword"
-        minSdk = 22
+        minSdk = 23
         targetSdk = 36
         versionCode = 24
         versionName = "0.7.7"
@@ -27,7 +27,14 @@ android {
 
     buildFeatures { buildConfig = true }
 
-    // Three builds from the same code. All have the keyboard shortcut and run on Android 5.1+.
+    // Anonymous usage counts (Analytics.kt). A PostHog project key is public by design: it can
+    // only send events, not read them. Empty turns analytics off.
+    defaultConfig {
+        buildConfigField("String", "POSTHOG_KEY", "\"phc_BjYGs7MHnDDkKMYWY7Cod5AiHWMLubtbEoC3XCrg5sjo\"")
+        buildConfigField("String", "POSTHOG_HOST", "\"https://us.i.posthog.com\"")
+    }
+
+    // Three builds from the same code. All have the keyboard shortcut and run on Android 6+.
     // They differ only in how updates arrive:
     //   browser:     WordForWord.apk on GitHub. Update opens the new APK in the browser.
     //   selfInstall: WordForWordSelfUpdate.apk on GitHub. The app downloads and installs its own
@@ -94,6 +101,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("org.apache.commons:commons-compress:1.27.1")
+    implementation("com.posthog:posthog-android:3.76.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

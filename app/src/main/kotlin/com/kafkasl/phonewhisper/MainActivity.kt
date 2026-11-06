@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private var updateChecking = false
     private lateinit var updateNotifySwitch: MaterialSwitch
     private lateinit var vibrateSwitch: MaterialSwitch
+    private lateinit var analyticsSwitch: MaterialSwitch
 
     // Export and import of all settings, including the API key (SettingsBackup.kt).
     private val exportLauncher = registerForActivityResult(
@@ -234,6 +235,13 @@ class MainActivity : AppCompatActivity() {
         updateNotifyRowSub = updateNotifyRow.findViewWithTag("subtitle")
         // The Play build gets its updates from Play, so it has no update check to turn on.
         if (BuildConfig.UPDATES) root.addView(updateNotifyRow)
+
+        analyticsSwitch = MaterialSwitch(this).apply { isClickable = false }
+        root.addView(settingsRow("Share usage data",
+            "Anonymous counts, like recordings made and errors. Never your audio, words or API key", analyticsSwitch) {
+            Analytics.setEnabled(this, !Analytics.enabled(this))
+            refresh()
+        })
 
         root.addView(settingsRow("Export settings", "Save all settings, including your API key, to a file") {
             exportLauncher.launch("word-for-word-settings.json")
@@ -761,6 +769,7 @@ class MainActivity : AppCompatActivity() {
         statusSubtitle.setTextColor(if (ready) attrColor(com.google.android.material.R.attr.colorPrimary) else attrColor(android.R.attr.textColorSecondary))
         
         vibrateSwitch.isChecked = prefs().getBoolean("vibrate", true)
+        analyticsSwitch.isChecked = Analytics.enabled(this)
         val notifyOn = UpdateNotifier.enabled(this)
         updateNotifySwitch.isChecked = notifyOn
         updateNotifyRowSub.text = when {

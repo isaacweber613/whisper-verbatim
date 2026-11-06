@@ -87,7 +87,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     /** Set when the keyboard shortcut is on; the mic button then shows only while you talk. */
     private var shortcut: ShortcutMatcher? = null
     private val shortcutHeld = Runnable {
-        if (shortcut?.holdElapsed(android.os.SystemClock.uptimeMillis()) == true) onTap()
+        if (shortcut?.holdElapsed(android.os.SystemClock.uptimeMillis()) == true) onTap("shortcut")
     }
     /** Keeps the button up while a "couldn't type here" message shows. */
     private var showingPasteFailure = false
@@ -164,7 +164,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         if (capturingShortcut) return false
         when (event.action) {
             KeyEvent.ACTION_DOWN -> when (m.onDown(event.keyCode, event.repeatCount, event.eventTime)) {
-                ShortcutMatcher.Result.FIRE -> onTap()
+                ShortcutMatcher.Result.FIRE -> onTap("shortcut")
                 ShortcutMatcher.Result.WAIT -> {
                     handler.removeCallbacks(shortcutHeld)
                     handler.postDelayed(shortcutHeld, Shortcut.holdMs(prefs()))
@@ -322,7 +322,7 @@ class WhisperAccessibilityService : AccessibilityService() {
                     if (discarded) {
                         // The hold already discarded the recording; this isn't a tap.
                     } else if (moved < TAP_THRESHOLD_DP * dp) {
-                        onTap()
+                        onTap("button")
                     } else {
                         params.x = if (params.x + ringSize / 2 > screenW / 2)
                             screenW - ringSize - margin else margin
@@ -512,9 +512,10 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     // --- State machine ---
 
-    private fun onTap() {
+    /** [via] is "button" or "shortcut", for the anonymous usage counts. */
+    private fun onTap(via: String) {
         when (state) {
-            State.IDLE -> startRecording()
+            State.IDLE -> startRecording(via)
             State.RECORDING -> stopAndTranscribe()
             State.TRANSCRIBING -> toast("Still transcribing. One moment.")
             State.RETRY -> retry()
@@ -548,7 +549,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         reset("Recording discarded")
     }
 
-    private fun startRecording() {
+    private fun startRecording(via: String) {
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             toast("Microphone permission is off. Open Word for Word to turn it on."); return
@@ -575,6 +576,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             return
         }
         pcmStream = ByteArrayOutputStream()
+        Analytics.track("recording_started", mapOf("via" to via))
         state = State.RECORDING
         setBusy(false)
         setAppearance(COLOR_RECORDING)
@@ -652,8 +654,10 @@ class WhisperAccessibilityService : AccessibilityService() {
         val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
         val verbatim = prefs().getBoolean("verbatim", false)
         val language = prefs().getString("language", "auto") ?: "auto"
+        val seconds = pcm.size / 32000
         TranscriberClient.transcribe(wav, apiKey, model, verbatim, language) { result ->
             if (result.text != null && result.text.isNotBlank()) {
+                Analytics.track("transcribed", mapOf("model" to model, "seconds" to seconds, "backup_model" to false))
                 handleTranscriptionResult(result.text, model)
             } else if (TranscriberClient.shouldTryAnotherModel(result.code, result.detail)) {
                 // The chosen model is busy or down: send the same recording to another model right away.
@@ -662,14 +666,15 @@ class WhisperAccessibilityService : AccessibilityService() {
                 TranscriberClient.transcribe(wav, apiKey, backup, verbatim, language) { second ->
                     Log.i(TAG, "$backup answered: ${if (!second.text.isNullOrBlank()) "text" else second.code?.let { "error $it" } ?: "no text"}")
                     if (second.text != null && second.text.isNotBlank()) {
+                        Analytics.track("transcribed", mapOf("model" to backup, "seconds" to seconds, "backup_model" to true))
                         showFeedback("${TranscriberClient.titleFor(model)} was unavailable. Used ${TranscriberClient.titleFor(backup)}.", 4000)
                         handleTranscriptionResult(second.text, backup)
                     } else {
-                        failTranscription(pcm, if (second.error == null && second.text != null) second else result)
+                        failTranscription(pcm, model, if (second.error == null && second.text != null) second else result)
                     }
                 }
             } else {
-                failTranscription(pcm, result)
+                failTranscription(pcm, model, result)
             }
         }
     }
@@ -679,8 +684,13 @@ class WhisperAccessibilityService : AccessibilityService() {
      * empty answer, so the button goes back to the mic and a tap starts a new recording.
      * Other failures (network, server) keep the recording for a retry.
      */
-    private fun failTranscription(pcm: ByteArray, result: TranscriberClient.Result) {
-        if (result.error == null && result.text != null) {
+    private fun failTranscription(pcm: ByteArray, model: String, result: TranscriberClient.Result) {
+        val heardNothing = result.error == null && result.text != null
+        Analytics.track("transcription_failed", mapOf(
+            "model" to model,
+            "reason" to if (heardNothing) "no_words" else "error",
+            "http_code" to (result.code ?: 0)))
+        if (heardNothing) {
             handler.post { reset(NO_WORDS) }
         } else {
             failWithRetry(pcm, result.error ?: NO_WORDS)
@@ -780,6 +790,7 @@ class WhisperAccessibilityService : AccessibilityService() {
                 for (candidate in candidates) {
                     if (tryPaste(candidate)) { pasted = true; break }
                 }
+                Analytics.track("text_inserted", mapOf("method" to if (pasted) "pasted" else "clipboard_only"))
                 showFeedback(if (pasted) "Pasted (this box doesn't accept typed text)"
                              else "Couldn't type here. Copied to clipboard and saved to history", 3000)
                 if (!pasted) {
@@ -788,6 +799,7 @@ class WhisperAccessibilityService : AccessibilityService() {
                     handler.postDelayed(endPasteFailure, 3000)
                 }
             }
+            if (typed) Analytics.track("text_inserted", mapOf("method" to "typed"))
         } finally {
             candidates.forEach { it.recycle() }
         }

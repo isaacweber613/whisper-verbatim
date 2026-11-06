@@ -2,7 +2,8 @@
 
 ## Two builds, always released together
 
-Every build has the keyboard shortcut and runs on Android 5.1+. Isaac (2026-11-06) chose this
+Every build has the keyboard shortcut and runs on Android 6+ (Isaac, 2026-11-06: dropped 5.1 so the
+PostHog analytics library, which needs Android 6, could be used). Earlier that day he chose this
 over separate keypad and Android 11+ editions: the shortcut alone doesn't trigger Play Protect,
 and about 1 MB more storage after installing is fine. The builds (flavors in
 `app/build.gradle.kts`) differ only in how updates install:
@@ -12,6 +13,13 @@ and about 1 MB more storage after installing is fine. The builds (flavors in
   (`src/selfInstall/`). Play Protect blocks it as harmful; "Install anyway" works.
 
 Every change goes into both builds, and every release ships both.
+
+## App size
+
+Isaac (2026-11-06): "Anything you do that makes the app bigger in size, you have to consult me
+first." Then: "Up to 5% bigger, you don't have to ask me." So measure every change that grows the
+APK or its installed size. Up to 5% bigger, go ahead and mention the sizes. More than 5%, tell him
+the before and after sizes and wait for his OK.
 
 ## Releasing
 
