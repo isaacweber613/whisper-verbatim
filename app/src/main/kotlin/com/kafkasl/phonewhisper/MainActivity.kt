@@ -294,10 +294,8 @@ class MainActivity : AppCompatActivity() {
     private fun showAccessibilityStep() {
         // Google Play requires this disclosure, and a clear yes, before sending anyone to turn the service on.
         if (!prefs().getBoolean("acc_disclosure_agreed", false)) { showAccessibilityDisclosure(); return }
-        // Android only blocks the service as a "restricted setting" for apps not installed from an app store.
-        if (installedFromStore() && prefs().getInt("acc_setup_phase", 0) < 2) setAccPhase(2)
         val phase = prefs().getInt("acc_setup_phase", 0)
-        val b = setupBuilder(1, if (phase >= 2 && installedFromStore()) "Accessibility" else "Accessibility (part ${phase + 1} of 3)")
+        val b = setupBuilder(1, "Accessibility (part ${phase + 1} of 3)")
         when (phase) {
             0 -> b.setMessage(
                     "Tap Open Accessibility, then try to turn on Word for Word. Android will probably block it with a \"Restricted setting\" message, because the app didn't come from the Play Store. That's expected. Come back here after.")
@@ -313,8 +311,7 @@ class MainActivity : AppCompatActivity() {
                     setAccPhase(2); openAccessibilitySettings()
                 }
             else -> b.setMessage(
-                    if (installedFromStore()) "Tap Open Accessibility, tap Word for Word, and turn it on."
-                    else "Last part. Tap Open Accessibility and turn on Word for Word.\n\n" +
+                    "Last part. Tap Open Accessibility and turn on Word for Word.\n\n" +
                     "If it's still blocked, tap App info and allow restricted settings again.")
                 .setPositiveButton("Open Accessibility") { _, _ -> openAccessibilitySettings() }
                 .setNeutralButton("App info") { _, _ -> openAppInfo() }
@@ -340,14 +337,6 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("No thanks") { _, _ -> setupSnoozed = true }
             .show()
-    }
-
-    /** True when the Play Store (or another app store) installed the app, rather than a downloaded APK. */
-    private fun installedFromStore(): Boolean = try {
-        val installer = packageManager.getInstallSourceInfo(packageName).installingPackageName
-        installer != null && installer != "com.google.android.packageinstaller" && installer != "com.android.packageinstaller"
-    } catch (e: Exception) {
-        false
     }
 
     /**
