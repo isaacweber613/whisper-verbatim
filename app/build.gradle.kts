@@ -19,8 +19,8 @@ android {
         applicationId = "com.isaacweber.wordforword"
         minSdk = 23
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.7.8"
+        versionCode = 26
+        versionName = "0.7.9"
 
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -47,16 +47,20 @@ android {
             dimension = "updates"
             buildConfigField("String", "APK_NAME", "\"WordForWord.apk\"")
             buildConfigField("boolean", "UPDATES", "true")
+            buildConfigField("String", "SERVICE_URL", "\"\"")
         }
         create("selfInstall") {
             dimension = "updates"
             buildConfigField("String", "APK_NAME", "\"WordForWordSelfUpdate.apk\"")
             buildConfigField("boolean", "UPDATES", "true")
+            buildConfigField("String", "SERVICE_URL", "\"\"")
         }
         create("play") {
             dimension = "updates"
             buildConfigField("String", "APK_NAME", "\"\"")
             buildConfigField("boolean", "UPDATES", "false")
+            // Free minutes through Word for Word's server (server/, FreeMinutes.kt).
+            buildConfigField("String", "SERVICE_URL", "\"https://word-for-word.ynbsd6242.workers.dev\"")
         }
     }
 

@@ -128,26 +128,59 @@ object TranscriberClient {
         return body.toString()
     }
 
-    fun transcribe(wavData: ByteArray, apiKey: String, model: String, verbatim: Boolean, language: String, callback: (Result) -> Unit) {
-        val request = Request.Builder()
-            .url("https://openrouter.ai/api/v1/audio/transcriptions")
-            .header("Authorization", "Bearer $apiKey")
-            .header("X-Title", "Word for Word")
+    /**
+     * With [deviceId] set (the Play build with no key entered, see FreeMinutes), the audio goes
+     * to Word for Word's server, which uses its own OpenRouter key and counts free minutes.
+     */
+    fun transcribe(wavData: ByteArray, apiKey: String, model: String, verbatim: Boolean, language: String,
+                   deviceId: String? = null, callback: (Result) -> Unit) {
+        val viaServer = deviceId != null
+        val builder = Request.Builder()
+        if (viaServer) {
+            builder.url(BuildConfig.SERVICE_URL + "/v1/transcriptions").header("X-Device-Id", deviceId!!)
+        } else {
+            builder.url("https://openrouter.ai/api/v1/audio/transcriptions")
+                .header("Authorization", "Bearer $apiKey")
+                .header("X-Title", "Word for Word")
+        }
+        val request = builder
             .post(buildBody(wavData, model, verbatim, language).toRequestBody("application/json".toMediaType()))
             .build()
 
         client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = callback(Result(null, networkError(e)))
+            override fun onFailure(call: Call, e: IOException) =
+                callback(Result(null, if (viaServer) serverNetworkError(e) else networkError(e)))
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
                 if (response.isSuccessful) {
                     callback(parseResponse(body))
                 } else {
                     val detail = parseResponse(body).error
-                    callback(Result(null, httpError(response.code, detail, model), response.code, detail))
+                    val message = if (viaServer) serverError(response.code, body, detail, model)
+                                  else httpError(response.code, detail, model)
+                    callback(Result(null, message, response.code, detail))
                 }
             }
         })
+    }
+
+    private fun serverNetworkError(e: IOException): String = when (e) {
+        is java.net.UnknownHostException -> "No internet connection. Your words weren't sent."
+        is java.net.SocketTimeoutException -> "The transcription service took too long to answer. Try again."
+        else -> "Couldn't reach Word for Word's server (${e.message ?: "connection error"}). Try again."
+    }
+
+    /** Plain-language message for an error answer from Word for Word's server. */
+    fun serverError(code: Int, body: String, detail: String?, model: String): String {
+        val errorCode = try { JSONObject(body).getJSONObject("error").optString("code") } catch (e: Exception) { "" }
+        return when {
+            errorCode == "free_minutes_used" ->
+                "You've used this month's free minutes. To keep going now, add your own OpenRouter key in Word for Word."
+            // The server's OpenRouter key reached its monthly spending limit.
+            code == 402 || code == 401 || code == 403 ->
+                "Free minutes are paused right now. Try again later, or add your own OpenRouter key in Word for Word."
+            else -> httpError(code, detail, model)
+        }
     }
 
     /** Plain-language message for a failed connection. */

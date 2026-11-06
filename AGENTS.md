@@ -51,6 +51,21 @@ the private upload key. The key is `~/.android/wordforword-upload.jks`; its pass
 `keystore.properties` in the repo root, which is never committed. Only the Play build uses that
 key; the GitHub builds keep the debug key. Every change still goes into all three builds.
 
+## Free minutes server (Play build only)
+
+Isaac (2026-11-06): the Play build gives 30 free minutes a month per phone, so people can dictate
+without their own OpenRouter key. With no key entered, the app sends audio to a Cloudflare Worker
+(`server/`, deployed as `word-for-word` at https://word-for-word.ynbsd6242.workers.dev), which
+holds an OpenRouter key, counts each phone's seconds in the D1 database `word-for-word`, and
+answers like OpenRouter. GitHub builds have no server URL and always need the person's own key.
+
+- The OpenRouter key "Word for Word server" has a $10 monthly limit (Isaac's choice) that caps
+  total cost, since a faked device ID could get extra free minutes until Play purchases and
+  Play Integrity checks are added. It's stored only as the Worker secret `OPENROUTER_KEY`.
+- Free minutes per month: `FREE_SECONDS_PER_MONTH` in `server/wrangler.jsonc`.
+- Deploy: `cd server && npm test && npx wrangler deploy`.
+- Paid plans (Play Billing) aren't built yet; they need Isaac's Play Console account.
+
 ## Testing the keyboard shortcut on an emulator
 
 `adb shell input keyevent` and `input keycombination` never reach accessibility services, so

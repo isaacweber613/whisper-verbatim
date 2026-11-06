@@ -308,6 +308,7 @@ class MainActivity : AppCompatActivity() {
         refresh(); maybeRunSetup()
         // Reopening from recent apps doesn't restart the screen, so check here, not only at start.
         checkForUpdate()
+        loadFreeMinutes()
     }
 
     override fun onPause() {
@@ -327,10 +328,12 @@ class MainActivity : AppCompatActivity() {
         val useLocal = prefs().getBoolean("use_local", false)
         val usePostProcessing = prefs().getBoolean("use_post_processing", false)
         val hasKey = !prefs().getString("api_key", "").isNullOrBlank()
+        // The Play build's free minutes need no key; cleanup (post-processing) still does.
+        val canTranscribe = hasKey || FreeMinutes.available
         return when {
             !hasPerm(Manifest.permission.RECORD_AUDIO) -> SetupStep.MIC
             WhisperAccessibilityService.instance == null -> SetupStep.ACCESSIBILITY
-            (!useLocal || usePostProcessing) && !hasKey -> SetupStep.API_KEY
+            (!useLocal && !canTranscribe) || (usePostProcessing && !hasKey) -> SetupStep.API_KEY
             else -> SetupStep.DONE
         }
     }
@@ -451,6 +454,24 @@ class MainActivity : AppCompatActivity() {
             .setItems(items) { _, which -> BackgroundSettings.open(this, steps[which]) }
             .setNegativeButton("Close", null)
             .show()
+    }
+
+    // --- Free minutes (Play build) ---
+
+    private var freeMinutesText = "Optional. Without a key you get free minutes each month"
+
+    /** Shows how many of this month's free minutes are used, under the API key row. */
+    private fun loadFreeMinutes() {
+        if (!FreeMinutes.inUse(this)) return
+        FreeMinutes.usage(this) { usage ->
+            if (usage == null) return@usage
+            runOnUiThread {
+                val used = Math.ceil(usage.usedSeconds / 60).toInt().coerceAtMost((usage.freeSeconds / 60).toInt())
+                val free = (usage.freeSeconds / 60).toInt()
+                freeMinutesText = "Optional. Without a key: $used of $free free minutes used this month"
+                if (!isFinishing) refresh()
+            }
+        }
     }
 
     // --- In-app updates ---
@@ -741,7 +762,8 @@ class MainActivity : AppCompatActivity() {
         promptRow.visibility = if (usePostProcessing) View.VISIBLE else View.GONE
 
         val apiKey = prefs().getString("api_key", "") ?: ""
-        keyRowSub.text = if (apiKey.isBlank()) "Tap to set" 
+        keyRowSub.text = if (apiKey.isBlank() && FreeMinutes.available) freeMinutesText
+                         else if (apiKey.isBlank()) "Tap to set" 
                          else if (apiKey.length > 7) "${apiKey.take(6)}...${apiKey.takeLast(4)}" 
                          else "Set"
 
@@ -756,7 +778,7 @@ class MainActivity : AppCompatActivity() {
 
         // Ready logic
         val localReady = useLocal && hasModel
-        val cloudReady = !useLocal && hasKey
+        val cloudReady = !useLocal && (hasKey || FreeMinutes.available)
         val postReady = !usePostProcessing || hasKey
         val ready = audio && acc && (localReady || cloudReady) && postReady
 

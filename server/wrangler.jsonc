@@ -1,0 +1,14 @@
+{
+  "name": "word-for-word",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "word-for-word", "database_id": "bbfffaf0-e142-49b9-9566-21e9409c767b" }
+  ],
+  "vars": {
+    // 30 free minutes per phone per month (Isaac, 2026-11-06).
+    "FREE_SECONDS_PER_MONTH": "1800"
+  }
+  // Secret, set with `wrangler secret put OPENROUTER_KEY`: an OpenRouter key with a $10 monthly limit.
+}

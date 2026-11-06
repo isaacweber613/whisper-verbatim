@@ -467,15 +467,18 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     /** Swaps the mic icon for bars that move with your voice. */
+    // 25 ms: Isaac (2026-11-06) found the first 60 ms too long and asked for less than half.
+    private val BUZZ_MS = 25L
+
     /** A short buzz when recording starts or stops, from the button or the shortcut (setting "vibrate", on by default). */
     private fun buzz() {
         if (!prefs().getBoolean("vibrate", true)) return
         try {
             val vibrator = getSystemService(VIBRATOR_SERVICE) as? android.os.Vibrator ?: return
             if (android.os.Build.VERSION.SDK_INT >= 26) {
-                vibrator.vibrate(android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(BUZZ_MS, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
             } else {
-                @Suppress("DEPRECATION") vibrator.vibrate(60)
+                @Suppress("DEPRECATION") vibrator.vibrate(BUZZ_MS)
             }
         } catch (_: Exception) {
         }
@@ -649,24 +652,27 @@ class WhisperAccessibilityService : AccessibilityService() {
     private fun transcribeApi(pcm: ByteArray) {
         val wav = WavWriter.encode(pcm)
         val apiKey = prefs().getString("api_key", "") ?: ""
-        if (apiKey.isBlank()) { failWithRetry(pcm, "Set your OpenRouter API key in the Word for Word app"); return }
+        // The Play build with no key entered uses Word for Word's server and its free minutes.
+        val deviceId = if (FreeMinutes.inUse(this)) FreeMinutes.deviceId(this) else null
+        if (apiKey.isBlank() && deviceId == null) { failWithRetry(pcm, "Set your OpenRouter API key in the Word for Word app"); return }
 
         val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
         val verbatim = prefs().getBoolean("verbatim", false)
         val language = prefs().getString("language", "auto") ?: "auto"
-        val seconds = pcm.size / 32000
-        TranscriberClient.transcribe(wav, apiKey, model, verbatim, language) { result ->
+        // Audio length to a tenth of a second (16 kHz, 16-bit mono = 32,000 bytes a second), for usage stats.
+        val seconds = Math.round(pcm.size / 3200.0) / 10.0
+        TranscriberClient.transcribe(wav, apiKey, model, verbatim, language, deviceId) { result ->
             if (result.text != null && result.text.isNotBlank()) {
-                Analytics.track("transcribed", mapOf("model" to model, "seconds" to seconds, "backup_model" to false))
+                Analytics.track("transcribed", mapOf("model" to model, "seconds" to seconds, "backup_model" to false, "free_minutes" to (deviceId != null)))
                 handleTranscriptionResult(result.text, model)
             } else if (TranscriberClient.shouldTryAnotherModel(result.code, result.detail)) {
                 // The chosen model is busy or down: send the same recording to another model right away.
                 val backup = TranscriberClient.fallbackFor(model)
                 Log.i(TAG, "$model failed (${result.code}), trying $backup")
-                TranscriberClient.transcribe(wav, apiKey, backup, verbatim, language) { second ->
+                TranscriberClient.transcribe(wav, apiKey, backup, verbatim, language, deviceId) { second ->
                     Log.i(TAG, "$backup answered: ${if (!second.text.isNullOrBlank()) "text" else second.code?.let { "error $it" } ?: "no text"}")
                     if (second.text != null && second.text.isNotBlank()) {
-                        Analytics.track("transcribed", mapOf("model" to backup, "seconds" to seconds, "backup_model" to true))
+                        Analytics.track("transcribed", mapOf("model" to backup, "seconds" to seconds, "backup_model" to true, "free_minutes" to (deviceId != null)))
                         showFeedback("${TranscriberClient.titleFor(model)} was unavailable. Used ${TranscriberClient.titleFor(backup)}.", 4000)
                         handleTranscriptionResult(second.text, backup)
                     } else {
