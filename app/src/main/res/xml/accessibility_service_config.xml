@@ -3,11 +3,13 @@
      keyboard window opens or closes, so the button shows only while you're typing.
      flagReportViewIds exposes box IDs (like WhatsApp's message box), which the
      placeholder check needs so "Message" never gets typed in front of your words.
-     The keypad edition overrides this file to allow the keyboard shortcut. -->
+     canRequestFilterKeyEvents lets the optional keyboard shortcut see key presses; the
+     service turns key filtering on only while that shortcut is on. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeViewFocused|typeWindowsChanged|typeWindowStateChanged"
     android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canRetrieveWindowContent="true"
+    android:canRequestFilterKeyEvents="true"
     android:notificationTimeout="100"
     android:description="@string/accessibility_description" />

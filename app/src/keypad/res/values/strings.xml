@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Word for Word Keypad</string>
-    <string name="accessibility_description">Dictation: records audio, transcribes, and inserts text into focused fields. If you turn on the keyboard shortcut, it also watches for that key press.</string>
-</resources>

@@ -6,8 +6,8 @@ import android.widget.TextView
 import android.widget.Toast
 
 /**
- * Tapping Update in the browser editions: opens the new APK in the browser, and Android's own
- * installer takes it from there. These editions have no permission to install apps, so
+ * Tapping Update in the browser build: opens the new APK in the browser, and Android's own
+ * installer takes it from there. This build has no permission to install apps, so
  * Google Play Protect doesn't block them.
  */
 class UpdateAction(private val activity: Activity, @Suppress("unused") private val subtitle: TextView) {

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Builds, signs and publishes the three released editions as one GitHub release.
+# Builds, signs and publishes both builds as one GitHub release.
 #   ./scripts/release.sh <notes-file>
 # Bump versionCode and versionName in app/build.gradle.kts and commit first.
-# Assets: WordForWord.apk (regular), WordForWordKeypad.apk (keypad), both installing their own
-# updates, and WordForWordLite.apk (regular, updates open in the browser, no Play Protect block).
-# Each edition's updater downloads only its own file, so keep these names.
+# Assets: WordForWord.apk (updates open in the browser, no Play Protect block) and
+# WordForWordSelfUpdate.apk (installs its own updates; Play Protect blocks it as harmful).
+# Each build's updater downloads only its own file, so keep these names.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 NOTES=${1:?usage: release.sh <notes-file>}
@@ -16,8 +16,8 @@ BT=$(ls -d "$SDK/build-tools/"* | tail -1)
 # Releases so far are signed with the debug key; a different key can't install over them.
 KS="$HOME/.android/debug.keystore"
 
-./gradlew testRegularSelfInstallDebugUnitTest testKeypadBrowserDebugUnitTest \
-  assembleRegularSelfInstallRelease assembleKeypadSelfInstallRelease assembleRegularBrowserRelease -q
+./gradlew testBrowserDebugUnitTest testSelfInstallDebugUnitTest \
+  assembleBrowserRelease assembleSelfInstallRelease -q
 
 sign() { # <variant folder> <output>
   local tmp; tmp=$(mktemp)
@@ -25,10 +25,9 @@ sign() { # <variant folder> <output>
   "$BT/apksigner.bat" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$2" "$tmp" 2>/dev/null     || "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$2" "$tmp"
   rm -f "$tmp" "$2.idsig"
 }
-sign regularSelfInstall WordForWord.apk
-sign keypadSelfInstall WordForWordKeypad.apk
-sign regularBrowser WordForWordLite.apk
+sign browser WordForWord.apk
+sign selfInstall WordForWordSelfUpdate.apk
 
 VERSION=$(grep -o 'versionName = "[^"]*"' app/build.gradle.kts | cut -d'"' -f2)
-gh release create "v$VERSION" WordForWord.apk WordForWordKeypad.apk WordForWordLite.apk \
+gh release create "v$VERSION" WordForWord.apk WordForWordSelfUpdate.apk \
   -R isaacweber613/whisper-verbatim --title "Word for Word $VERSION" --notes-file "$NOTES" --target main

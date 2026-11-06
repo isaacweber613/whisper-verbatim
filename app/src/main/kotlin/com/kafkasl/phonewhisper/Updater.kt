@@ -7,15 +7,15 @@ import org.json.JSONObject
 
 /**
  * Update check for the sideloaded APK: looks at the latest GitHub release for this edition's
- * APK. What tapping Update does lives in [UpdateAction]: the selfInstall editions download
- * and install it in the app; the browser editions open it in the browser, because an
+ * APK. What tapping Update does lives in [UpdateAction]: the selfInstall build downloads
+ * and installs it in the app; the browser build opens it in the browser, because an
  * accessibility app that can install other apps gets blocked by Google Play Protect.
  */
 object Updater {
     private const val TAG = "PhoneWhisper"
     private const val LATEST_RELEASE = "https://api.github.com/repos/isaacweber613/whisper-verbatim/releases/latest"
     /** Each edition updates to its own file in the release. */
-    const val APK_NAME = BuildConfig.APK_BASE + BuildConfig.APK_SUFFIX + ".apk"
+    const val APK_NAME = BuildConfig.APK_NAME
 
     data class Release(val version: String, val apkUrl: String, val size: Long)
 

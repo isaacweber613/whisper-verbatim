@@ -15,7 +15,7 @@ import okhttp3.Request
 import java.io.File
 
 /**
- * Tapping Update in the selfInstall editions: the first tap downloads the APK inside the app,
+ * Tapping Update in the selfInstall build: the first tap downloads the APK inside the app,
  * the next tap installs it with Android's PackageInstaller. Android still shows its own
  * confirmation screen. Needs REQUEST_INSTALL_PACKAGES (src/selfInstall/AndroidManifest.xml),
  * which makes Google Play Protect block the app as harmful.

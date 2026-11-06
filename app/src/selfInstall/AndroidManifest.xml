@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only the selfInstall editions may install their own updates (see UpdateAction.kt). -->
+<!-- Only the selfInstall build may install their own updates (see UpdateAction.kt). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application>
