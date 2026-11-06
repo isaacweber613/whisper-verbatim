@@ -309,14 +309,18 @@ class MainActivity : AppCompatActivity() {
         val b = setupBuilder(1, "Accessibility (part ${phase + 1} of 3)")
         when (phase) {
             0 -> b.setMessage(
-                    "Tap Open Accessibility, then try to turn on Word for Word. Android will probably block it with a \"Restricted setting\" message, because the app didn't come from the Play Store. That's expected. Come back here after.")
+                    "Tap Open Accessibility, then tap Word for Word. Android will block it with \"App was denied access.\" That's expected.\n\n" +
+                    "Tap Close, then go back to return here for the next part.")
                 .setPositiveButton("Open Accessibility") { _, _ ->
                     setAccPhase(1); openAccessibilitySettings()
+                    // Shows over Settings, right where people get stuck on the "denied" message.
+                    Toast.makeText(this, "When Android blocks it, tap Close, then go back", Toast.LENGTH_LONG).show()
                 }
             1 -> b.setMessage(
-                    "Now unblock it. Tap Open App info, tap the three-dot menu at the top right, tap Allow restricted settings, and confirm with your fingerprint or PIN. Then come back here.")
+                    "Now unblock it. Tap Open App info, tap the three-dot menu at the top right, tap Allow restricted settings, and confirm with your fingerprint or PIN. Then go back to return here.")
                 .setPositiveButton("Open App info") { _, _ ->
                     setAccPhase(2); openAppInfo()
+                    Toast.makeText(this, "⋮ menu → Allow restricted settings, then go back", Toast.LENGTH_LONG).show()
                 }
                 .setNeutralButton("It wasn't blocked") { _, _ ->
                     setAccPhase(2); openAccessibilitySettings()
