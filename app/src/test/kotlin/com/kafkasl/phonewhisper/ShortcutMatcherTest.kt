@@ -62,4 +62,21 @@ class ShortcutMatcherTest {
         m.onUp(star)
         assertFalse(m.holdElapsed())
     }
+
+    @Test fun keysAreNotBlockedByDefault() {
+        val m = ShortcutMatcher(setOf(five), 0)
+        assertFalse(m.blocks(five))
+    }
+
+    @Test fun aBlockedOneKeyShortcutHidesOnlyThatKey() {
+        val m = ShortcutMatcher(setOf(five), 0, blockKey = true)
+        assertTrue(m.blocks(five))
+        assertFalse(m.blocks(other))
+    }
+
+    @Test fun twoKeyShortcutsNeverBlock() {
+        val m = ShortcutMatcher(setOf(star, five), 0, blockKey = true)
+        assertFalse(m.blocks(star))
+        assertFalse(m.blocks(five))
+    }
 }

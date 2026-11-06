@@ -50,6 +50,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var shortcutKeysRowSub: TextView
     private lateinit var shortcutHoldRow: LinearLayout
     private lateinit var shortcutHoldRowSub: TextView
+    private lateinit var shortcutBlockRow: LinearLayout
+    private lateinit var shortcutBlockSwitch: MaterialSwitch
+    private lateinit var shortcutBlockRowSub: TextView
 
     // Setup walkthrough state
     private var setupDialog: android.app.AlertDialog? = null
@@ -219,6 +222,15 @@ class MainActivity : AppCompatActivity() {
         shortcutHoldRow = settingsRow("How long to press", "") { pickHoldTime() }
         shortcutHoldRowSub = shortcutHoldRow.findViewWithTag("subtitle")
         root.addView(shortcutHoldRow)
+        // Shown only for a one-key shortcut; two-key shortcuts never block their keys.
+        shortcutBlockSwitch = MaterialSwitch(this).apply { isClickable = false }
+        shortcutBlockRow = settingsRow("Turn off the key's normal job", "", shortcutBlockSwitch) {
+            prefs().edit().putBoolean("shortcut_block_key", !shortcutBlockSwitch.isChecked).apply()
+            WhisperAccessibilityService.instance?.applyShortcutSettings()
+            refresh()
+        }
+        shortcutBlockRowSub = shortcutBlockRow.findViewWithTag("subtitle")
+        root.addView(shortcutBlockRow)
 
         setContentView(ScrollView(this).apply {
             setBackgroundColor(attrColor(android.R.attr.colorBackground))
@@ -708,6 +720,12 @@ class MainActivity : AppCompatActivity() {
         shortcutHoldRow.visibility = if (shortcutOn) View.VISIBLE else View.GONE
         shortcutKeysRowSub.text = Shortcut.describe(Shortcut.keys(prefs()))
         shortcutHoldRowSub.text = Shortcut.describeHold(Shortcut.holdMs(prefs()))
+        val oneKey = Shortcut.keys(prefs()).size == 1
+        val block = prefs().getBoolean("shortcut_block_key", false)
+        shortcutBlockRow.visibility = if (shortcutOn && oneKey) View.VISIBLE else View.GONE
+        shortcutBlockSwitch.isChecked = block
+        shortcutBlockRowSub.text = if (block) "On: the key only starts and stops talking"
+                                   else "Off: the key also does its normal job"
 
         refreshAllCards()
         refreshPromptRows()

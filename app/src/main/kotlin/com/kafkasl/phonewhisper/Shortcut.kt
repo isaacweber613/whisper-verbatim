@@ -6,10 +6,11 @@ import android.view.KeyEvent
 /**
  * The keyboard shortcut that starts and stops talking, for phones with a physical keypad.
  * Saved as prefs "shortcut_enabled", "shortcut_keys" (key codes, comma separated) and
- * "shortcut_hold_ms" (0 = a quick press).
+ * "shortcut_hold_ms" (0 = a quick press) and "shortcut_block_key" (a one-key shortcut
+ * stops doing its normal job; two-key shortcuts never block their keys).
  */
 object Shortcut {
-    const val DEFAULT_HOLD_MS = 500L
+    const val DEFAULT_HOLD_MS = 0L
 
     fun enabled(p: SharedPreferences) = p.getBoolean("shortcut_enabled", false) && keys(p).isNotEmpty()
 
@@ -17,6 +18,9 @@ object Shortcut {
         (p.getString("shortcut_keys", "") ?: "").split(',').mapNotNull { it.trim().toIntOrNull() }.toSet()
 
     fun holdMs(p: SharedPreferences) = p.getLong("shortcut_hold_ms", DEFAULT_HOLD_MS)
+
+    /** Only a one-key shortcut can block its key. */
+    fun blocksKey(p: SharedPreferences) = p.getBoolean("shortcut_block_key", false) && keys(p).size == 1
 
     /** Kept in the order you pressed them, so "* + 5" reads the way you press it. */
     fun encode(keys: Set<Int>) = keys.joinToString(",")
@@ -53,12 +57,15 @@ object Shortcut {
 }
 
 /**
- * Watches key presses for the shortcut. It never blocks a key: every press still reaches the
- * app, so the shortcut keys keep typing as usual. It fires when exactly the shortcut keys are
- * down; with a hold time, [holdElapsed] is called after that time and fires only if they are
- * still held.
+ * Watches key presses for the shortcut. It fires when exactly the shortcut keys are down;
+ * with a hold time, [holdElapsed] is called after that time and fires only if they are still
+ * held. Keys reach the app as usual, unless [blockKey] is set for a one-key shortcut: then
+ * [blocks] hides that key from apps.
  */
-class ShortcutMatcher(private val keys: Set<Int>, private val holdMs: Long) {
+class ShortcutMatcher(private val keys: Set<Int>, private val holdMs: Long, private val blockKey: Boolean = false) {
+    /** True when this key's press, repeat or release should be hidden from apps. */
+    fun blocks(code: Int) = blockKey && keys.size == 1 && code in keys
+
     enum class Result { NONE, FIRE, WAIT }
 
     private val down = mutableSetOf<Int>()

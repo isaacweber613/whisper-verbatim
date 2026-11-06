@@ -125,7 +125,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     fun applyShortcutSettings() {
         val p = prefs()
         val on = Shortcut.enabled(p)
-        shortcut = if (on) ShortcutMatcher(Shortcut.keys(p), Shortcut.holdMs(p)) else null
+        shortcut = if (on) ShortcutMatcher(Shortcut.keys(p), Shortcut.holdMs(p), Shortcut.blocksKey(p)) else null
         handler.removeCallbacks(shortcutHeld)
         // Ask Android for key presses only while the shortcut is on.
         serviceInfo = serviceInfo?.apply {
@@ -135,7 +135,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         scheduleVisibilityUpdate()
     }
 
-    /** Only watches: returns false so every key still reaches the app as usual. */
+    /** Returns true only to hide a blocked one-key shortcut from apps; other keys reach the app as usual. */
     override fun onKeyEvent(event: KeyEvent): Boolean {
         val m = shortcut ?: return false
         if (capturingShortcut) return false
@@ -150,7 +150,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             }
             KeyEvent.ACTION_UP -> m.onUp(event.keyCode)
         }
-        return false
+        return m.blocks(event.keyCode)
     }
 
     // --- Show the button only while the keyboard is open ---
