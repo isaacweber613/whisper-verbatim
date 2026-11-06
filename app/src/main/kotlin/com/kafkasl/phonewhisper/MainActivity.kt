@@ -698,7 +698,7 @@ class MainActivity : AppCompatActivity() {
         }
         // A custom model chosen before saved models existed still shows up, and is kept.
         if (isCustom && current !in savedCustomModels()) setSavedCustomModels(savedCustomModels() + current)
-        for (id in savedCustomModels()) {
+        for (id in savedCustomModels().filter { s -> TranscriberClient.CLOUD_MODELS.none { it.id == s } }) {
             list.addView(row(id, "Custom model", id == current, null, onDelete = {
                 setSavedCustomModels(savedCustomModels() - id)
                 if (id == current) prefs().edit().putString("cloud_model", TranscriberClient.DEFAULT_MODEL).apply()
@@ -710,7 +710,7 @@ class MainActivity : AppCompatActivity() {
         }
         list.addView(row("Add custom model", "Paste any OpenRouter model ID", false,
             "Use any speech-to-text model on OpenRouter. Copy its ID from the model's OpenRouter page " +
-            "(for example, openai/gpt-transcribe) and paste it here.\n\n" +
+            "(for example, deepgram/nova-3) and paste it here.\n\n" +
             "Verbatim mode sends a keep-everything setting to Microsoft, ElevenLabs, and AssemblyAI models. " +
             "Other models use their own default. In testing, Mistral and AssemblyAI kept \"um\" and \"uh\" anyway, " +
             "while Deepgram removed them no matter what.") {
@@ -738,7 +738,7 @@ class MainActivity : AppCompatActivity() {
         }
         android.app.AlertDialog.Builder(this)
             .setTitle("Add custom model")
-            .setMessage("Paste the model's ID from OpenRouter, for example openai/gpt-transcribe.")
+            .setMessage("Paste the model's ID from OpenRouter, for example deepgram/nova-3.")
             .setView(input.apply { setPadding(dp(24), dp(8), dp(24), dp(8)) })
             .setPositiveButton("Save") { _, _ ->
                 // Accept a pasted page link too: keep only the "provider/model" part.
