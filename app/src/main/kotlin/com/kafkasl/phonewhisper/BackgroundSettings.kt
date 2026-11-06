@@ -180,13 +180,15 @@ object BackgroundSettings {
 
     /** Android's own battery optimization; the maker's "unrestricted" maps to it on most phones. */
     private fun batteryStep(title: String, howTo: String) = Step(title, howTo, batteryOptimization = true) {
-        if (it.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(it.packageName)) Status.DONE
+        // Android 5 has no battery optimization, so there is nothing to turn off.
+        if (android.os.Build.VERSION.SDK_INT < 23) Status.DONE
+        else if ((it.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(it.packageName)) Status.DONE
         else Status.TODO
     }
 
     /** Xiaomi stores Autostart as its own app op (10008); reading it is not public API, so it may fail. */
     private fun xiaomiAutostart(context: Context): Status = try {
-        val ops = context.getSystemService(AppOpsManager::class.java)
+        val ops = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val check = AppOpsManager::class.java.getMethod(
             "checkOpNoThrow", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, String::class.java
         )
@@ -204,7 +206,7 @@ object BackgroundSettings {
         } + listOfNotNull(
             // On Android 12+ app info has the Battery entry with "Unrestricted".
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${activity.packageName}")),
-            if (step.batteryOptimization) Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) else null,
+            if (step.batteryOptimization && android.os.Build.VERSION.SDK_INT >= 23) Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS) else null,
         )
         for (intent in candidates) {
             try {

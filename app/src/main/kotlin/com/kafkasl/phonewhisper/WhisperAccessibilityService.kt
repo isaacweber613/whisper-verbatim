@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -35,6 +36,8 @@ class WhisperAccessibilityService : AccessibilityService() {
         var instance: WhisperAccessibilityService? = null
         /** Called on the main thread when the service turns on or off, so the open app can update right away. */
         var onStateChanged: (() -> Unit)? = null
+        /** True while the app's "set shortcut" dialog listens for keys, so they reach it. */
+        var capturingShortcut = false
         private const val TAG = "PhoneWhisper"
         private const val SAMPLE_RATE = 16000
         private const val BTN_DP = 44
@@ -80,6 +83,13 @@ class WhisperAccessibilityService : AccessibilityService() {
         }?.start()
     }
 
+    /** Set when the keyboard shortcut is on; the mic button then shows only while you talk. */
+    private var shortcut: ShortcutMatcher? = null
+    private val shortcutHeld = Runnable { if (shortcut?.holdElapsed() == true) onTap() }
+    /** Keeps the button up while a "couldn't type here" message shows. */
+    private var showingPasteFailure = false
+    private val endPasteFailure = Runnable { showingPasteFailure = false; scheduleVisibilityUpdate() }
+
     // Local transcription engine (loaded lazily)
     private var localTranscriber: LocalTranscriber? = null
 
@@ -91,6 +101,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         instance = this
         handler.post { onStateChanged?.invoke() }
         showOverlay()
+        applyShortcutSettings()
         // Try to load local model in background
         thread { initLocalModel() }
     }
@@ -107,6 +118,40 @@ class WhisperAccessibilityService : AccessibilityService() {
         scheduleVisibilityUpdate()
     }
     override fun onInterrupt() {}
+
+    // --- Keyboard shortcut ---
+
+    /** Reads the shortcut settings; called on start and whenever the app changes them. */
+    fun applyShortcutSettings() {
+        val p = prefs()
+        val on = Shortcut.enabled(p)
+        shortcut = if (on) ShortcutMatcher(Shortcut.keys(p), Shortcut.holdMs(p)) else null
+        handler.removeCallbacks(shortcutHeld)
+        // Ask Android for key presses only while the shortcut is on.
+        serviceInfo = serviceInfo?.apply {
+            val f = android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
+            flags = if (on) flags or f else flags and f.inv()
+        }
+        scheduleVisibilityUpdate()
+    }
+
+    /** Only watches: returns false so every key still reaches the app as usual. */
+    override fun onKeyEvent(event: KeyEvent): Boolean {
+        val m = shortcut ?: return false
+        if (capturingShortcut) return false
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> when (m.onDown(event.keyCode, event.repeatCount)) {
+                ShortcutMatcher.Result.FIRE -> onTap()
+                ShortcutMatcher.Result.WAIT -> {
+                    handler.removeCallbacks(shortcutHeld)
+                    handler.postDelayed(shortcutHeld, Shortcut.holdMs(prefs()))
+                }
+                ShortcutMatcher.Result.NONE -> Unit
+            }
+            KeyEvent.ACTION_UP -> m.onUp(event.keyCode)
+        }
+        return false
+    }
 
     // --- Show the button only while the keyboard is open ---
 
@@ -128,7 +173,10 @@ class WhisperAccessibilityService : AccessibilityService() {
         val overlay = overlayView ?: return
         val params = layoutParams ?: return
         // Never hide mid-recording or mid-transcription, even if the keyboard closes.
-        val show = state == State.RECORDING || state == State.TRANSCRIBING || keyboardVisible()
+        // With the keyboard shortcut on, the button shows only while you talk, not with the keyboard.
+        val busy = state == State.RECORDING || state == State.TRANSCRIBING
+        val show = if (shortcut != null) busy || state == State.RETRY || showingPasteFailure
+                   else busy || keyboardVisible()
         val wasShown = overlay.visibility == View.VISIBLE
         if (show == wasShown) return
         overlay.visibility = if (show) View.VISIBLE else View.GONE
@@ -443,7 +491,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             state = State.RETRY
             setBusy(false)
             setAppearance(COLOR_RETRY)
-            showFeedback("$msg\nTap to try again. Hold to discard.", 6000)
+            showFeedback(if (shortcut != null) "$msg\nPress the shortcut to try again." else "$msg\nTap to try again. Hold to discard.", 6000)
         }
     }
 
@@ -464,7 +512,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     private fun startRecording() {
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             toast("Microphone permission is off. Open Word for Word to turn it on."); return
         }
@@ -681,7 +729,12 @@ class WhisperAccessibilityService : AccessibilityService() {
                     if (tryPaste(candidate)) { pasted = true; break }
                 }
                 showFeedback(if (pasted) "Pasted (this box doesn't accept typed text)"
-                             else "Couldn't type here. Copied to clipboard", 3000)
+                             else "Couldn't type here. Copied to clipboard and saved to history", 3000)
+                if (!pasted) {
+                    showingPasteFailure = true
+                    handler.removeCallbacks(endPasteFailure)
+                    handler.postDelayed(endPasteFailure, 3000)
+                }
             }
         } finally {
             candidates.forEach { it.recycle() }
@@ -808,6 +861,8 @@ class WhisperAccessibilityService : AccessibilityService() {
         val text = node.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) return true
         val key = placeholderKey(node)
+        // Android 7 and older don't report placeholders, so only remembered ones are caught there.
+        if (android.os.Build.VERSION.SDK_INT < 26) return key != null && knownPlaceholders().contains("$key|$text")
         if (node.isShowingHintText) {
             rememberPlaceholder(key, text)
             return true

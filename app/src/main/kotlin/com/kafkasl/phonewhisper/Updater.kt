@@ -104,7 +104,7 @@ object Updater {
             val status = Intent(context, InstallStatusReceiver::class.java).setAction(ACTION_INSTALL_STATUS)
             // Mutable: Android fills in the install status.
             val pending = PendingIntent.getBroadcast(context, sessionId, status,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
+                PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0))
             session.commit(pending.intentSender)
         }
     }

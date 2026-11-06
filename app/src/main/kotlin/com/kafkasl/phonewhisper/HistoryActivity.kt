@@ -71,6 +71,7 @@ class HistoryActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(24), dp(12), dp(24), dp(12))
             background = selectable()
+            isFocusable = true
             addView(keepTexts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(keepSwitch)
             setOnClickListener {
@@ -101,6 +102,7 @@ class HistoryActivity : AppCompatActivity() {
             setTextColor(attrColor(com.google.android.material.R.attr.colorPrimary))
             setPadding(dp(24), dp(12), dp(24), dp(12))
             background = selectable()
+            isFocusable = true
             setOnClickListener {
                 android.app.AlertDialog.Builder(this@HistoryActivity)
                     .setTitle("Clear all history?")
@@ -150,6 +152,7 @@ class HistoryActivity : AppCompatActivity() {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(24), dp(12), dp(24), dp(12))
                 background = selectable()
+                isFocusable = true
                 addView(TextView(this@HistoryActivity).apply {
                     text = whenText
                     textSize = 12f

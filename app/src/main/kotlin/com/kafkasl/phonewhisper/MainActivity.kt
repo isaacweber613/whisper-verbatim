@@ -44,6 +44,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var promptRow: LinearLayout
     private lateinit var modelContainer: LinearLayout
     private lateinit var promptContainer: LinearLayout
+    private lateinit var shortcutSwitch: MaterialSwitch
+    private lateinit var shortcutRowSub: TextView
+    private lateinit var shortcutKeysRow: LinearLayout
+    private lateinit var shortcutKeysRowSub: TextView
+    private lateinit var shortcutHoldRow: LinearLayout
+    private lateinit var shortcutHoldRowSub: TextView
 
     // Setup walkthrough state
     private var setupDialog: android.app.AlertDialog? = null
@@ -191,6 +197,28 @@ class MainActivity : AppCompatActivity() {
         val keyRow = settingsRow("OpenRouter API Key", "Tap to set") { promptApiKey() }
         keyRowSub = keyRow.findViewWithTag("subtitle")
         root.addView(keyRow)
+
+        // --- Keyboard shortcut, last on the page so touch-screen users never need it ---
+        root.addView(sectionHeader("Keyboard shortcut (for phones with a physical keyboard)"))
+        shortcutSwitch = MaterialSwitch(this).apply {
+            isChecked = prefs().getBoolean("shortcut_enabled", false)
+            isClickable = false
+        }
+        val shortcutRow = settingsRow("Start and stop talking", "", shortcutSwitch) {
+            when {
+                shortcutSwitch.isChecked -> setShortcutEnabled(false)
+                Shortcut.keys(prefs()).isEmpty() -> captureShortcut { setShortcutEnabled(true) }
+                else -> setShortcutEnabled(true)
+            }
+        }
+        shortcutRowSub = shortcutRow.findViewWithTag("subtitle")
+        root.addView(shortcutRow)
+        shortcutKeysRow = settingsRow("Shortcut keys", "") { captureShortcut(null) }
+        shortcutKeysRowSub = shortcutKeysRow.findViewWithTag("subtitle")
+        root.addView(shortcutKeysRow)
+        shortcutHoldRow = settingsRow("How long to press", "") { pickHoldTime() }
+        shortcutHoldRowSub = shortcutHoldRow.findViewWithTag("subtitle")
+        root.addView(shortcutHoldRow)
 
         setContentView(ScrollView(this).apply {
             setBackgroundColor(attrColor(android.R.attr.colorBackground))
@@ -406,7 +434,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun installUpdate(apk: File) {
         // Android asks once whether this app may install apps.
-        if (!packageManager.canRequestPackageInstalls()) {
+        // Before Android 8, the phone-wide "Unknown sources" switch covers this, and it's on already.
+        if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
             startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 android.net.Uri.parse("package:$packageName")))
             Toast.makeText(this, "Allow Word for Word to install updates, then come back and tap Install", Toast.LENGTH_LONG).show()
@@ -430,6 +459,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage(
                 "Word for Word uses Accessibility to show the mic button and type your words into the text box you're in. " +
                 "It reads only that text box, and never saves or shares it. " +
+                "If you turn on the keyboard shortcut, it also watches for that key press. " +
                 "Your recording goes only to OpenRouter, with your own key.")
             .setPositiveButton("Agree") { _, _ ->
                 prefs().edit().putBoolean("acc_disclosure_agreed", true).apply()
@@ -664,11 +694,124 @@ class MainActivity : AppCompatActivity() {
         val postReady = !usePostProcessing || hasKey
         val ready = audio && acc && (localReady || cloudReady) && postReady
 
-        statusSubtitle.text = if (ready) "Ready. Tap the floating dot in any app to dictate" else "Setup required. Tap here to continue"
+        val shortcutOn = Shortcut.enabled(prefs())
+        statusSubtitle.text = when {
+            !ready -> "Setup required. Tap here to continue"
+            shortcutOn -> "Ready. Press ${Shortcut.describe(Shortcut.keys(prefs()))} in any app to dictate"
+            else -> "Ready. Tap the floating dot in any app to dictate"
+        }
         statusSubtitle.setTextColor(if (ready) attrColor(com.google.android.material.R.attr.colorPrimary) else attrColor(android.R.attr.textColorSecondary))
         
+        shortcutSwitch.isChecked = shortcutOn
+        shortcutRowSub.text = if (shortcutOn) "On. The mic button shows only while you talk" else "Off"
+        shortcutKeysRow.visibility = if (shortcutOn) View.VISIBLE else View.GONE
+        shortcutHoldRow.visibility = if (shortcutOn) View.VISIBLE else View.GONE
+        shortcutKeysRowSub.text = Shortcut.describe(Shortcut.keys(prefs()))
+        shortcutHoldRowSub.text = Shortcut.describeHold(Shortcut.holdMs(prefs()))
+
         refreshAllCards()
         refreshPromptRows()
+    }
+
+    // --- Keyboard shortcut ---
+
+    private fun setShortcutEnabled(on: Boolean) {
+        prefs().edit().putBoolean("shortcut_enabled", on).apply()
+        WhisperAccessibilityService.instance?.applyShortcutSettings()
+        refresh()
+    }
+
+    /**
+     * Listens for the key or keys you press and offers to save them. While it listens,
+     * every key press goes to this dialog; once it has caught a shortcut, the keys move
+     * between the buttons normally again.
+     */
+    private fun captureShortcut(onSaved: (() -> Unit)?) {
+        val ask = "Press the key or keys you want to use, then let go. " +
+            "The keys keep working as usual."
+        val held = mutableSetOf<Int>()
+        val pressed = mutableSetOf<Int>()
+        var caught: Set<Int>? = null
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle("Set shortcut")
+            .setMessage(ask)
+            .setPositiveButton("Save", null)
+            .setNeutralButton("Try again", null)
+            .setNegativeButton("Cancel", null)
+            .create()
+        dialog.setOnKeyListener { _, code, ev ->
+            if (caught != null) return@setOnKeyListener false
+            when (ev.action) {
+                android.view.KeyEvent.ACTION_DOWN -> if (ev.repeatCount == 0) { held += code; pressed += code }
+                android.view.KeyEvent.ACTION_UP -> {
+                    held -= code
+                    if (held.isEmpty() && pressed.isNotEmpty()) {
+                        caught = pressed.toSet()
+                        dialog.setMessage("Shortcut: ${Shortcut.describe(pressed)}")
+                        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).apply { isEnabled = true; requestFocus() }
+                    }
+                }
+            }
+            true
+        }
+        dialog.setOnDismissListener { WhisperAccessibilityService.capturingShortcut = false }
+        WhisperAccessibilityService.capturingShortcut = true
+        dialog.show()
+        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).apply {
+            isEnabled = false
+            setOnClickListener {
+                val keys = caught ?: return@setOnClickListener
+                prefs().edit().putString("shortcut_keys", Shortcut.encode(keys)).apply()
+                dialog.dismiss()
+                WhisperAccessibilityService.instance?.applyShortcutSettings()
+                refresh()
+                onSaved?.invoke()
+            }
+        }
+        dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            caught = null; held.clear(); pressed.clear()
+            dialog.setMessage(ask)
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+        }
+    }
+
+    private fun pickHoldTime() {
+        val presets = listOf(0L, 500L, 1000L)
+        val names = (presets.map { Shortcut.describeHold(it) } + "Custom").toTypedArray()
+        val current = presets.indexOf(Shortcut.holdMs(prefs())).let { if (it < 0) presets.size else it }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("How long to press")
+            .setSingleChoiceItems(names, current) { d, which ->
+                d.dismiss()
+                if (which < presets.size) saveHoldTime(presets[which]) else promptCustomHoldTime()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun promptCustomHoldTime() {
+        val input = EditText(this).apply {
+            hint = "Seconds, for example 1.5"
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setText(Shortcut.formatSeconds(Shortcut.holdMs(prefs())))
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("How long to press")
+            .setView(input.apply { setPadding(dp(24), dp(8), dp(24), dp(8)) })
+            .setPositiveButton("Save") { _, _ ->
+                val seconds = input.text.toString().trim().toDoubleOrNull()
+                if (seconds == null || seconds < 0) toast("Type a number of seconds, like 1.5")
+                else saveHoldTime((seconds * 1000).toLong())
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun saveHoldTime(ms: Long) {
+        prefs().edit().putLong("shortcut_hold_ms", ms).apply()
+        WhisperAccessibilityService.instance?.applyShortcutSettings()
+        refresh()
     }
 
     private fun promptApiKey(fromSetup: Boolean = false) {
@@ -753,6 +896,7 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(16), dp(10), dp(8), dp(10))
                 isClickable = true
+                isFocusable = true
                 background = selectableBackground()
                 setOnClickListener { onPick() }
                 addView(radio)
@@ -765,6 +909,7 @@ class MainActivity : AppCompatActivity() {
                         setTextColor(attrColor(com.google.android.material.R.attr.colorPrimary))
                         setPadding(dp(12), dp(4), dp(12), dp(4))
                         isClickable = true
+                        isFocusable = true
                         background = selectableBackground()
                         contentDescription = "About $title"
                         setOnClickListener {
@@ -784,6 +929,7 @@ class MainActivity : AppCompatActivity() {
                         setTextColor(attrColor(android.R.attr.textColorSecondary))
                         setPadding(dp(14), dp(4), dp(14), dp(4))
                         isClickable = true
+                        isFocusable = true
                         background = selectableBackground()
                         contentDescription = "Delete $title"
                         setOnClickListener { onDelete() }

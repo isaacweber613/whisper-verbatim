@@ -17,10 +17,10 @@ android {
 
     defaultConfig {
         applicationId = "com.isaacweber.wordforword"
-        minSdk = 30
+        minSdk = 22
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.6.7"
+        versionCode = 15
+        versionName = "0.6.8"
 
         ndk { abiFilters += "arm64-v8a" }
     }
