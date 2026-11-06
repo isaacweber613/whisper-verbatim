@@ -31,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var updateRow: LinearLayout
     private lateinit var updateRowSub: TextView
     private var update: Updater.Release? = null
+    private lateinit var updateAction: UpdateAction
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
     private lateinit var cloudModelRowSub: TextView
@@ -98,6 +99,7 @@ class MainActivity : AppCompatActivity() {
         // Shown only when GitHub has a newer release: tap to download, then tap to install.
         updateRow = settingsRow("Update", "") { onUpdateTapped() }
         updateRowSub = updateRow.findViewWithTag("subtitle")
+        updateAction = UpdateAction(this, updateRowSub)
         updateRow.visibility = View.GONE
         root.addView(updateRow)
         checkForUpdate()
@@ -420,14 +422,9 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    /** Opens the new APK in the browser; Android's own installer takes it from there. */
     private fun onUpdateTapped() {
         val release = update ?: return
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.apkUrl)))
-        } catch (e: Exception) {
-            Toast.makeText(this, "Couldn't open the browser to download the update.", Toast.LENGTH_LONG).show()
-        }
+        updateAction.onTap(release)
     }
 
     private fun setAccPhase(phase: Int) = prefs().edit().putInt("acc_setup_phase", phase).apply()

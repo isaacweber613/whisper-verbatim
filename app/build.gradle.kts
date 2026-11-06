@@ -27,24 +27,35 @@ android {
 
     buildFeatures { buildConfig = true }
 
-    // Two editions from the same code, released together:
-    //   regular: no keyboard shortcut, Android 11+. Code stays uncompressed in the APK,
-    //            so the app doesn't grow after installing.
-    //   keypad:  adds the keyboard shortcut for phones with physical keys, Android 5.1+.
-    //            Its permission to watch key presses makes Play Protect warn on install.
-    flavorDimensions += "edition"
+    // Editions from the same code, released together. Two choices are combined:
+    //   edition  regular: no keyboard shortcut, Android 11+. Code stays uncompressed in the APK,
+    //                     so the app doesn't grow after installing.
+    //            keypad:  adds the keyboard shortcut for phones with physical keys, Android 5.1+.
+    //   updates  selfInstall: the app downloads and installs its own updates. Needs
+    //                     REQUEST_INSTALL_PACKAGES, which makes Play Protect block it as harmful.
+    //            browser: Update opens the APK in the browser; no install permission.
+    // Released: regularSelfInstall, keypadSelfInstall, regularBrowser (see scripts/release.sh).
+    flavorDimensions += listOf("edition", "updates")
     productFlavors {
         create("regular") {
             dimension = "edition"
             minSdk = 30
             buildConfigField("boolean", "KEYPAD", "false")
-            buildConfigField("String", "APK_NAME", "\"WordForWord.apk\"")
+            buildConfigField("String", "APK_BASE", "\"WordForWord\"")
         }
         create("keypad") {
             dimension = "edition"
             minSdk = 22
             buildConfigField("boolean", "KEYPAD", "true")
-            buildConfigField("String", "APK_NAME", "\"WordForWordKeypad.apk\"")
+            buildConfigField("String", "APK_BASE", "\"WordForWordKeypad\"")
+        }
+        create("selfInstall") {
+            dimension = "updates"
+            buildConfigField("String", "APK_SUFFIX", "\"\"")
+        }
+        create("browser") {
+            dimension = "updates"
+            buildConfigField("String", "APK_SUFFIX", "\"Lite\"")
         }
     }
 

@@ -1,35 +1,40 @@
 # Word for Word: notes for coding agents
 
-## Two editions, always released together
+## Editions, always released together
 
-The app ships in two editions built from the same code (product flavors in `app/build.gradle.kts`):
+The app is built from one codebase with two flavor choices (`app/build.gradle.kts`):
 
-- **regular** (`WordForWord.apk`, "Word for Word"): no keyboard shortcut, Android 11+.
-  Its code stays uncompressed in the APK, so the app doesn't grow after installing.
-- **keypad** (`WordForWordKeypad.apk`, "Word for Word Keypad"): adds the keyboard shortcut for
-  phones with physical keys, Android 5.1+. It asks Android to watch key presses, so Play
-  Protect warns "Harmful app blocked" when it is sideloaded; "Install anyway" works.
+- edition `regular`: no keyboard shortcut, Android 11+, code stays uncompressed so the app doesn't
+  grow after installing. Edition `keypad` ("Word for Word Keypad"): adds the keyboard shortcut for
+  phones with physical keys, Android 5.1+.
+- updates `selfInstall`: the app downloads and installs its own updates (`src/selfInstall/`).
+  Updates `browser`: Update opens the APK in the browser (`src/browser/`), no install permission.
 
-Isaac (2026-11-06): every change goes into both editions, and every release ships both.
+Released APKs: `WordForWord.apk` (regular + selfInstall), `WordForWordKeypad.apk`
+(keypad + selfInstall), `WordForWordLite.apk` (regular + browser). The keypad + browser build is
+not released yet.
+
+Isaac (2026-11-06): every change goes into every edition, and every release ships all of them.
 Keypad-only code checks `BuildConfig.KEYPAD`; keypad-only resources live in `app/src/keypad/`.
 
 ## Releasing
 
 1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`, commit and push.
 2. Write release notes to a file, then run `./scripts/release.sh <notes-file>`. It runs the unit
-   tests, builds and signs both editions, and creates the GitHub release with both APKs.
+   tests, builds and signs the released editions, and creates the GitHub release with their APKs.
    Older releases stay up.
 3. Send the APKs to Isaac's phone with `blip-send`.
 
 Each edition's in-app updater downloads only its own APK name from the latest release.
 
-## Never let the app install APKs itself
+## Play Protect and the in-app installer
 
 Isaac (2026-11-06): 0.6.7 to 0.7.0 asked for `REQUEST_INSTALL_PACKAGES` so the app could install
-its own updates. Google Play Protect then blocked every one of them as a "Harmful app"; 0.6.6 and
-a 0.7.0 test build without that permission installed cleanly on his phone. An accessibility app
-that can install other apps looks like malware. The Update row opens the APK in the browser
-instead; keep it that way.
+its own updates, and Google Play Protect blocked every one of them as a "Harmful app". 0.6.6 and a
+0.7.0 test build without that permission installed cleanly on his phone. An accessibility app that
+can install other apps, signed with the public debug key, looks like malware. Isaac still wants
+the in-app installer, so it lives only in the `selfInstall` editions; the Lite edition is the one
+without the warning.
 
 ## Testing the keyboard shortcut on an emulator
 

@@ -6,16 +6,16 @@ import okhttp3.Request
 import org.json.JSONObject
 
 /**
- * Update check for the sideloaded APK: looks at the latest GitHub release and, when it's
- * newer, the app offers to download it in the browser. The app doesn't install it itself:
- * an accessibility app that can install other apps (REQUEST_INSTALL_PACKAGES) gets flagged
- * as harmful by Google Play Protect, which happened with 0.6.7 through 0.7.0.
+ * Update check for the sideloaded APK: looks at the latest GitHub release for this edition's
+ * APK. What tapping Update does lives in [UpdateAction]: the selfInstall editions download
+ * and install it in the app; the browser editions open it in the browser, because an
+ * accessibility app that can install other apps gets blocked by Google Play Protect.
  */
 object Updater {
     private const val TAG = "PhoneWhisper"
     private const val LATEST_RELEASE = "https://api.github.com/repos/isaacweber613/whisper-verbatim/releases/latest"
     /** Each edition updates to its own file in the release. */
-    private const val APK_NAME = BuildConfig.APK_NAME
+    const val APK_NAME = BuildConfig.APK_BASE + BuildConfig.APK_SUFFIX + ".apk"
 
     data class Release(val version: String, val apkUrl: String, val size: Long)
 
