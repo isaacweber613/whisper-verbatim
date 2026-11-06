@@ -308,30 +308,27 @@ class MainActivity : AppCompatActivity() {
         val phase = prefs().getInt("acc_setup_phase", 0)
         val b = setupBuilder(1, "Accessibility (part ${phase + 1} of 3)")
         when (phase) {
-            0 -> b.setMessage(
-                    "Tap Open Accessibility, then tap Word for Word. Android will block it with \"App was denied access.\" That's expected.\n\n" +
-                    "Tap Close, then go back to return here for the next part.")
+            0 -> b.setMessage("Tap Word for Word. Android will block it. Tap Close and come back.")
                 .setPositiveButton("Open Accessibility") { _, _ ->
                     setAccPhase(1); openAccessibilitySettings()
-                    // Shows over Settings, right where people get stuck on the "denied" message.
-                    Toast.makeText(this, "When Android blocks it, tap Close, then go back", Toast.LENGTH_LONG).show()
+                    // Shows over Settings. Android blocks reminders from a background app with notifications off,
+                    // so this is the only one.
+                    Toast.makeText(this, "When Android blocks it, tap Close and come back", Toast.LENGTH_LONG).show()
                 }
-            1 -> b.setMessage(
-                    "Now unblock it. Tap Open App info, tap the three-dot menu at the top right, tap Allow restricted settings, and confirm with your fingerprint or PIN. Then go back to return here.")
+                .setNegativeButton("Later") { _, _ -> setupSnoozed = true }
+            // If Android didn't block it, the service is on and the walkthrough has moved on.
+            1 -> b.setMessage("Tap ⋮ at the top right, then Allow restricted settings. Then come back.")
                 .setPositiveButton("Open App info") { _, _ ->
                     setAccPhase(2); openAppInfo()
-                    Toast.makeText(this, "⋮ menu → Allow restricted settings, then go back", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Tap ⋮, then Allow restricted settings. Then come back", Toast.LENGTH_LONG).show()
                 }
-                .setNeutralButton("It wasn't blocked") { _, _ ->
-                    setAccPhase(2); openAccessibilitySettings()
-                }
-            else -> b.setMessage(
-                    "Last part. Tap Open Accessibility and turn on Word for Word.\n\n" +
-                    "If it's still blocked, tap App info and allow restricted settings again.")
+            else -> b.setMessage("Last part. Turn on Word for Word.")
                 .setPositiveButton("Open Accessibility") { _, _ -> openAccessibilitySettings() }
+                // In case it's still blocked: back to Allow restricted settings.
                 .setNeutralButton("App info") { _, _ -> openAppInfo() }
+                .setNegativeButton("Later") { _, _ -> setupSnoozed = true }
         }
-        setupDialog = b.setNegativeButton("Later") { _, _ -> setupSnoozed = true }.show()
+        setupDialog = b.show()
     }
 
     /**
