@@ -202,7 +202,10 @@ class MainActivity : AppCompatActivity() {
         root.addView(keyRow)
 
         // --- Keyboard shortcut, last on the page so touch-screen users never need it ---
-        root.addView(sectionHeader("Keyboard shortcut (for phones with a physical keyboard)"))
+        // Only the keypad edition shows it; the views are built either way so refresh() can update them.
+        val shortcutSection = vertical(0)
+        if (BuildConfig.KEYPAD) root.addView(shortcutSection)
+        shortcutSection.addView(sectionHeader("Keyboard shortcut (for phones with a physical keyboard)"))
         shortcutSwitch = MaterialSwitch(this).apply {
             isChecked = prefs().getBoolean("shortcut_enabled", false)
             isClickable = false
@@ -215,13 +218,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
         shortcutRowSub = shortcutRow.findViewWithTag("subtitle")
-        root.addView(shortcutRow)
+        shortcutSection.addView(shortcutRow)
         shortcutKeysRow = settingsRow("Shortcut keys", "") { captureShortcut(null) }
         shortcutKeysRowSub = shortcutKeysRow.findViewWithTag("subtitle")
-        root.addView(shortcutKeysRow)
+        shortcutSection.addView(shortcutKeysRow)
         shortcutHoldRow = settingsRow("How long to press", "") { pickHoldTime() }
         shortcutHoldRowSub = shortcutHoldRow.findViewWithTag("subtitle")
-        root.addView(shortcutHoldRow)
+        shortcutSection.addView(shortcutHoldRow)
         // Shown only for a one-key shortcut; two-key shortcuts never block their keys.
         shortcutBlockSwitch = MaterialSwitch(this).apply { isClickable = false }
         shortcutBlockRow = settingsRow("Turn off the key's normal job", "", shortcutBlockSwitch) {
@@ -230,7 +233,7 @@ class MainActivity : AppCompatActivity() {
             refresh()
         }
         shortcutBlockRowSub = shortcutBlockRow.findViewWithTag("subtitle")
-        root.addView(shortcutBlockRow)
+        shortcutSection.addView(shortcutBlockRow)
 
         setContentView(ScrollView(this).apply {
             setBackgroundColor(attrColor(android.R.attr.colorBackground))
@@ -471,7 +474,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage(
                 "Word for Word uses Accessibility to show the mic button and type your words into the text box you're in. " +
                 "It reads only that text box, and never saves or shares it. " +
-                "If you turn on the keyboard shortcut, it also watches for that key press. " +
+                (if (BuildConfig.KEYPAD) "If you turn on the keyboard shortcut, it also watches for that key press. " else "") +
                 "Your recording goes only to OpenRouter, with your own key.")
             .setPositiveButton("Agree") { _, _ ->
                 prefs().edit().putBoolean("acc_disclosure_agreed", true).apply()

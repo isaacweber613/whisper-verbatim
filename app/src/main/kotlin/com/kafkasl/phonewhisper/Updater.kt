@@ -20,7 +20,8 @@ import java.io.File
 object Updater {
     private const val TAG = "PhoneWhisper"
     private const val LATEST_RELEASE = "https://api.github.com/repos/isaacweber613/whisper-verbatim/releases/latest"
-    private const val APK_NAME = "WordForWord.apk"
+    /** Each edition updates to its own file in the release. */
+    private const val APK_NAME = BuildConfig.APK_NAME
     const val ACTION_INSTALL_STATUS = "com.isaacweber.wordforword.INSTALL_STATUS"
 
     data class Release(val version: String, val apkUrl: String, val size: Long)
@@ -41,13 +42,13 @@ object Updater {
         null
     }
 
-    fun parseRelease(json: String): Release? {
+    fun parseRelease(json: String, apkName: String = APK_NAME): Release? {
         val obj = JSONObject(json)
         val version = obj.optString("tag_name").removePrefix("v").ifBlank { return null }
         val assets = obj.optJSONArray("assets") ?: return null
         for (i in 0 until assets.length()) {
             val asset = assets.getJSONObject(i)
-            if (asset.optString("name") == APK_NAME) {
+            if (asset.optString("name") == apkName) {
                 return Release(version, asset.getString("browser_download_url"), asset.optLong("size"))
             }
         }

@@ -16,7 +16,7 @@ class UpdaterTest {
         val json = """{"tag_name":"v0.6.7","assets":[
             {"name":"notes.txt","browser_download_url":"https://x/notes.txt","size":1},
             {"name":"WordForWord.apk","browser_download_url":"https://x/WordForWord.apk","size":2857402}]}"""
-        assertEquals(Updater.Release("0.6.7", "https://x/WordForWord.apk", 2857402), Updater.parseRelease(json))
+        assertEquals(Updater.Release("0.6.7", "https://x/WordForWord.apk", 2857402), Updater.parseRelease(json, "WordForWord.apk"))
     }
 
     @Test fun `ignores a release without the APK`() {

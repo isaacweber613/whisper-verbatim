@@ -17,12 +17,35 @@ android {
 
     defaultConfig {
         applicationId = "com.isaacweber.wordforword"
-        minSdk = 22
+        minSdk = 30
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.6.9"
+        versionCode = 17
+        versionName = "0.7.0"
 
         ndk { abiFilters += "arm64-v8a" }
+    }
+
+    buildFeatures { buildConfig = true }
+
+    // Two editions from the same code, released together:
+    //   regular: no keyboard shortcut, Android 11+. Code stays uncompressed in the APK,
+    //            so the app doesn't grow after installing.
+    //   keypad:  adds the keyboard shortcut for phones with physical keys, Android 5.1+.
+    //            Its permission to watch key presses makes Play Protect warn on install.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("regular") {
+            dimension = "edition"
+            minSdk = 30
+            buildConfigField("boolean", "KEYPAD", "false")
+            buildConfigField("String", "APK_NAME", "\"WordForWord.apk\"")
+        }
+        create("keypad") {
+            dimension = "edition"
+            minSdk = 22
+            buildConfigField("boolean", "KEYPAD", "true")
+            buildConfigField("String", "APK_NAME", "\"WordForWordKeypad.apk\"")
+        }
     }
 
     signingConfigs {

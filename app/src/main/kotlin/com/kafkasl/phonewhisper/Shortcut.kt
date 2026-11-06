@@ -12,7 +12,9 @@ import android.view.KeyEvent
 object Shortcut {
     const val DEFAULT_HOLD_MS = 0L
 
-    fun enabled(p: SharedPreferences) = p.getBoolean("shortcut_enabled", false) && keys(p).isNotEmpty()
+    /** Always off in the regular edition, which has no keyboard shortcut. */
+    fun enabled(p: SharedPreferences) =
+        BuildConfig.KEYPAD && p.getBoolean("shortcut_enabled", false) && keys(p).isNotEmpty()
 
     fun keys(p: SharedPreferences): Set<Int> =
         (p.getString("shortcut_keys", "") ?: "").split(',').mapNotNull { it.trim().toIntOrNull() }.toSet()
