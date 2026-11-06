@@ -563,7 +563,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         if (apiKey.isBlank()) { failWithRetry(pcm, "Set your OpenRouter API key in the Word for Word app"); return }
 
         val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
-        val verbatim = prefs().getBoolean("verbatim", true)
+        val verbatim = prefs().getBoolean("verbatim", false)
         val language = prefs().getString("language", "auto") ?: "auto"
         TranscriberClient.transcribe(wav, apiKey, model, verbatim, language) { result ->
             if (result.text != null && result.text.isNotBlank()) {

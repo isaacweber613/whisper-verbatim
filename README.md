@@ -12,7 +12,7 @@ Word for Word (formerly Whisper Verbatim) is a fork of [kafkasl/phone-whisper](h
 - **Cloud transcription through [OpenRouter](https://openrouter.ai)** instead of OpenAI, using your own OpenRouter API key.
   Built-in choices: MAI-Transcribe 2 (Microsoft, the default), Voxtral Mini Transcribe 3 (Mistral), and Scribe v2 (ElevenLabs).
   You can also paste the ID of any speech-to-text model on OpenRouter.
-- **Verbatim mode** (on by default) asks the model to keep fillers, repeats, and false starts.
+- **Verbatim mode** (off by default) asks the model to keep fillers, repeats, and false starts.
 - **Types text directly into the box** at the cursor instead of going through the clipboard.
 - **The floating button shows only while the keyboard is open.**
 - **Setup walkthrough** for the microphone, the accessibility service (including Android's "restricted settings" step

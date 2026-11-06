@@ -130,7 +130,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(cloudModelRow)
 
         val verbatimSwitch = MaterialSwitch(this).apply {
-            isChecked = prefs().getBoolean("verbatim", true)
+            isChecked = prefs().getBoolean("verbatim", false)
             isClickable = false
         }
         verbatimRow = settingsRow("Verbatim mode",
