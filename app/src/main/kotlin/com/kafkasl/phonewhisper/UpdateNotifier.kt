@@ -26,7 +26,8 @@ object UpdateNotifier {
     private const val PREF = "update_notifications"
     private const val PREF_LAST = "update_notified_version"
 
-    fun enabled(context: Context) = prefs(context).getBoolean(PREF, false)
+    /** Always off in the Play build, which gets its updates from Play. */
+    fun enabled(context: Context) = BuildConfig.UPDATES && prefs(context).getBoolean(PREF, false)
 
     fun setEnabled(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean(PREF, on).apply()

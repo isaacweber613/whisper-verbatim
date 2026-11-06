@@ -33,6 +33,16 @@ the in-app installer, so it lives only in the `selfInstall` build; `WordForWord.
 without the warning. A keypad build without the installer also installed cleanly, so watching
 key presses alone doesn't trigger it.
 
+## Google Play build
+
+A third flavor, `play`, is for the Play Store only and isn't released on GitHub (Isaac,
+2026-11-06). It has no update check, no Update row and no update notifications
+(`BuildConfig.UPDATES` is false), because Play policy bans apps that update themselves outside
+Play. Build it with `./scripts/play-bundle.sh`, which writes `WordForWordPlay.aab`, signed with
+the private upload key. The key is `~/.android/wordforword-upload.jks`; its password is in
+`keystore.properties` in the repo root, which is never committed. Only the Play build uses that
+key; the GitHub builds keep the debug key. Every change still goes into all three builds.
+
 ## Testing the keyboard shortcut on an emulator
 
 `adb shell input keyevent` and `input keycombination` never reach accessibility services, so

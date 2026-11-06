@@ -27,20 +27,29 @@ android {
 
     buildFeatures { buildConfig = true }
 
-    // Two builds from the same code, released together. Both have the keyboard shortcut and
-    // run on Android 5.1+. They differ only in how updates install:
-    //   browser:     WordForWord.apk. Update opens the new APK in the browser.
-    //   selfInstall: WordForWordSelfUpdate.apk. The app downloads and installs its own updates.
-    //                Needs REQUEST_INSTALL_PACKAGES, which makes Play Protect block it as harmful.
+    // Three builds from the same code. All have the keyboard shortcut and run on Android 5.1+.
+    // They differ only in how updates arrive:
+    //   browser:     WordForWord.apk on GitHub. Update opens the new APK in the browser.
+    //   selfInstall: WordForWordSelfUpdate.apk on GitHub. The app downloads and installs its own
+    //                updates. Needs REQUEST_INSTALL_PACKAGES, which makes Play Protect block it.
+    //   play:        the Google Play app bundle. No update check at all: Play installs updates,
+    //                and Play policy bans apps that update themselves any other way.
     flavorDimensions += "updates"
     productFlavors {
         create("browser") {
             dimension = "updates"
             buildConfigField("String", "APK_NAME", "\"WordForWord.apk\"")
+            buildConfigField("boolean", "UPDATES", "true")
         }
         create("selfInstall") {
             dimension = "updates"
             buildConfigField("String", "APK_NAME", "\"WordForWordSelfUpdate.apk\"")
+            buildConfigField("boolean", "UPDATES", "true")
+        }
+        create("play") {
+            dimension = "updates"
+            buildConfigField("String", "APK_NAME", "\"\"")
+            buildConfigField("boolean", "UPDATES", "false")
         }
     }
 
@@ -55,9 +64,12 @@ android {
         }
     }
 
+    // Only the Play build uses the private upload key. The GitHub builds are signed with the
+    // debug key by scripts/release.sh, because a different key can't install over earlier releases.
+    productFlavors.getByName("play").signingConfig = signingConfigs.findByName("upload")
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.findByName("upload")
             // Remove library code and resources the app never uses.
             isMinifyEnabled = true
             isShrinkResources = true

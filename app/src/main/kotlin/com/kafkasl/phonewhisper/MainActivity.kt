@@ -232,7 +232,8 @@ class MainActivity : AppCompatActivity() {
             refresh()
         }
         updateNotifyRowSub = updateNotifyRow.findViewWithTag("subtitle")
-        root.addView(updateNotifyRow)
+        // The Play build gets its updates from Play, so it has no update check to turn on.
+        if (BuildConfig.UPDATES) root.addView(updateNotifyRow)
 
         root.addView(settingsRow("Export settings", "Save all settings, including your API key, to a file") {
             exportLauncher.launch("word-for-word-settings.json")
@@ -449,7 +450,7 @@ class MainActivity : AppCompatActivity() {
     private fun currentVersion(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
 
     private fun checkForUpdate() {
-        if (updateChecking) return
+        if (!BuildConfig.UPDATES || updateChecking) return
         updateChecking = true
         val current = currentVersion()
         Thread {
