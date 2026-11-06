@@ -31,8 +31,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var updateRow: LinearLayout
     private lateinit var updateRowSub: TextView
     private var update: Updater.Release? = null
-    private var updateApk: File? = null
-    private var updateDownloading = false
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
     private lateinit var cloudModelRowSub: TextView
@@ -422,44 +420,13 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    /** Opens the new APK in the browser; Android's own installer takes it from there. */
     private fun onUpdateTapped() {
         val release = update ?: return
-        if (updateDownloading) return
-        updateApk?.let { installUpdate(it); return }
-        updateDownloading = true
-        updateRowSub.text = "Downloading..."
-        Thread {
-            try {
-                val apk = Updater.download(this, release) { pct ->
-                    runOnUiThread { updateRowSub.text = "Downloading $pct%" }
-                }
-                runOnUiThread {
-                    updateApk = apk
-                    updateDownloading = false
-                    updateRowSub.text = "Tap to install"
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    updateDownloading = false
-                    updateRowSub.text = "Download failed. Tap to try again"
-                }
-            }
-        }.start()
-    }
-
-    private fun installUpdate(apk: File) {
-        // Android asks once whether this app may install apps.
-        // Before Android 8, the phone-wide "Unknown sources" switch covers this, and it's on already.
-        if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
-            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                android.net.Uri.parse("package:$packageName")))
-            Toast.makeText(this, "Allow Word for Word to install updates, then come back and tap Install", Toast.LENGTH_LONG).show()
-            return
-        }
         try {
-            Updater.install(this, apk)
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.apkUrl)))
         } catch (e: Exception) {
-            Toast.makeText(this, "The update didn't install. Try again.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Couldn't open the browser to download the update.", Toast.LENGTH_LONG).show()
         }
     }
 

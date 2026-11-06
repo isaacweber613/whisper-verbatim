@@ -23,6 +23,14 @@ Keypad-only code checks `BuildConfig.KEYPAD`; keypad-only resources live in `app
 
 Each edition's in-app updater downloads only its own APK name from the latest release.
 
+## Never let the app install APKs itself
+
+Isaac (2026-11-06): 0.6.7 to 0.7.0 asked for `REQUEST_INSTALL_PACKAGES` so the app could install
+its own updates. Google Play Protect then blocked every one of them as a "Harmful app"; 0.6.6 and
+a 0.7.0 test build without that permission installed cleanly on his phone. An accessibility app
+that can install other apps looks like malware. The Update row opens the APK in the browser
+instead; keep it that way.
+
 ## Testing the keyboard shortcut on an emulator
 
 `adb shell input keyevent` and `input keycombination` never reach accessibility services, so

@@ -1,28 +1,21 @@
 package com.kafkasl.phonewhisper
 
-import android.app.PendingIntent
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.util.Log
-import android.widget.Toast
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.io.File
 
 /**
- * In-app updates for the sideloaded APK: checks the latest GitHub release, downloads its
- * APK inside the app, and installs it with Android's PackageInstaller. Android still shows
- * its own confirmation screen; the person never leaves the app to find the file.
+ * Update check for the sideloaded APK: looks at the latest GitHub release and, when it's
+ * newer, the app offers to download it in the browser. The app doesn't install it itself:
+ * an accessibility app that can install other apps (REQUEST_INSTALL_PACKAGES) gets flagged
+ * as harmful by Google Play Protect, which happened with 0.6.7 through 0.7.0.
  */
 object Updater {
     private const val TAG = "PhoneWhisper"
     private const val LATEST_RELEASE = "https://api.github.com/repos/isaacweber613/whisper-verbatim/releases/latest"
     /** Each edition updates to its own file in the release. */
     private const val APK_NAME = BuildConfig.APK_NAME
-    const val ACTION_INSTALL_STATUS = "com.isaacweber.wordforword.INSTALL_STATUS"
 
     data class Release(val version: String, val apkUrl: String, val size: Long)
 
@@ -65,68 +58,5 @@ object Updater {
             if (x != y) return x > y
         }
         return false
-    }
-
-    /** Downloads the APK into the app's cache, reporting 0-100 to [progress]. Call off the main thread. */
-    fun download(context: Context, release: Release, progress: (Int) -> Unit): File {
-        val file = File(context.cacheDir, "update.apk")
-        client.newCall(Request.Builder().url(release.apkUrl).build()).execute().use { response ->
-            if (!response.isSuccessful) throw IllegalStateException("Download failed (error ${response.code})")
-            val body = response.body ?: throw IllegalStateException("Download failed")
-            val total = body.contentLength().takeIf { it > 0 } ?: release.size
-            body.byteStream().use { input ->
-                file.outputStream().use { output ->
-                    val buf = ByteArray(64 * 1024)
-                    var done = 0L
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n < 0) break
-                        output.write(buf, 0, n)
-                        done += n
-                        if (total > 0) progress((done * 100 / total).toInt())
-                    }
-                }
-            }
-        }
-        return file
-    }
-
-    /** Hands the downloaded APK to Android's installer. [InstallStatusReceiver] gets the result. */
-    fun install(context: Context, apk: File) {
-        val installer = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            .apply { setAppPackageName(context.packageName) }
-        val sessionId = installer.createSession(params)
-        installer.openSession(sessionId).use { session ->
-            session.openWrite(APK_NAME, 0, apk.length()).use { out ->
-                apk.inputStream().use { it.copyTo(out) }
-                session.fsync(out)
-            }
-            val status = Intent(context, InstallStatusReceiver::class.java).setAction(ACTION_INSTALL_STATUS)
-            // Mutable: Android fills in the install status.
-            val pending = PendingIntent.getBroadcast(context, sessionId, status,
-                PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0))
-            session.commit(pending.intentSender)
-        }
-    }
-}
-
-/** Shows Android's install confirmation, or says why the update didn't install. */
-class InstallStatusReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
-            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                @Suppress("DEPRECATION")
-                val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
-                context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-            PackageInstaller.STATUS_SUCCESS -> Unit
-            PackageInstaller.STATUS_FAILURE_ABORTED -> Unit // The person tapped Cancel.
-            else -> {
-                val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                Log.w("PhoneWhisper", "Update install failed: $msg")
-                Toast.makeText(context, "The update didn't install. Try again from Word for Word.", Toast.LENGTH_LONG).show()
-            }
-        }
     }
 }
