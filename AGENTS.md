@@ -27,7 +27,7 @@ the before and after sizes and wait for his OK.
 2. Write release notes to a file, then run `./scripts/release.sh <notes-file>`. It runs the unit
    tests, builds and signs both builds, and creates the GitHub release with both APKs.
    Older releases stay up.
-3. Send the APKs to Isaac's phone with `blip-send`.
+3. Send the APKs to Isaac's phone with `blip-send` only when he asks (Isaac, 2026-11-06).
 
 Each build's updater looks only for its own APK name in the latest release.
 
