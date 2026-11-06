@@ -466,9 +466,9 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     /** Swaps the mic icon for bars that move with your voice. */
-    /** A short buzz when recording starts or stops with the keyboard shortcut on. */
+    /** A short buzz when recording starts or stops, from the button or the shortcut (setting "vibrate", on by default). */
     private fun buzz() {
-        if (shortcut == null) return
+        if (!prefs().getBoolean("vibrate", true)) return
         try {
             val vibrator = getSystemService(VIBRATOR_SERVICE) as? android.os.Vibrator ?: return
             if (android.os.Build.VERSION.SDK_INT >= 26) {

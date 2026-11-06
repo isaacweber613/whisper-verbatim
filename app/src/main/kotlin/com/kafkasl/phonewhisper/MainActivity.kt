@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var updateAction: UpdateAction
     private var updateChecking = false
     private lateinit var updateNotifySwitch: MaterialSwitch
+    private lateinit var vibrateSwitch: MaterialSwitch
     private lateinit var updateNotifyRowSub: TextView
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
@@ -202,6 +203,12 @@ class MainActivity : AppCompatActivity() {
         val keyRow = settingsRow("OpenRouter API Key", "Tap to set") { promptApiKey() }
         keyRowSub = keyRow.findViewWithTag("subtitle")
         root.addView(keyRow)
+
+        vibrateSwitch = MaterialSwitch(this).apply { isClickable = false }
+        root.addView(settingsRow("Vibrate", "A short buzz when recording starts and stops", vibrateSwitch) {
+            prefs().edit().putBoolean("vibrate", !prefs().getBoolean("vibrate", true)).apply()
+            refresh()
+        })
 
         updateNotifySwitch = MaterialSwitch(this).apply { isClickable = false }
         val updateNotifyRow = settingsRow("Update notifications", "", updateNotifySwitch) {
@@ -702,6 +709,7 @@ class MainActivity : AppCompatActivity() {
         }
         statusSubtitle.setTextColor(if (ready) attrColor(com.google.android.material.R.attr.colorPrimary) else attrColor(android.R.attr.textColorSecondary))
         
+        vibrateSwitch.isChecked = prefs().getBoolean("vibrate", true)
         val notifyOn = UpdateNotifier.enabled(this)
         updateNotifySwitch.isChecked = notifyOn
         updateNotifyRowSub.text = when {
