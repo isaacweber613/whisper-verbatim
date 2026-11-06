@@ -35,6 +35,16 @@ class MainActivity : AppCompatActivity() {
     private var updateChecking = false
     private lateinit var updateNotifySwitch: MaterialSwitch
     private lateinit var vibrateSwitch: MaterialSwitch
+
+    // Export and import of all settings, including the API key (SettingsBackup.kt).
+    private val exportLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) exportSettings(uri)
+    }
+    private val importLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) importSettings(uri)
+    }
     private lateinit var updateNotifyRowSub: TextView
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
@@ -223,6 +233,13 @@ class MainActivity : AppCompatActivity() {
         }
         updateNotifyRowSub = updateNotifyRow.findViewWithTag("subtitle")
         root.addView(updateNotifyRow)
+
+        root.addView(settingsRow("Export settings", "Save all settings, including your API key, to a file") {
+            exportLauncher.launch("word-for-word-settings.json")
+        })
+        root.addView(settingsRow("Import settings", "Load settings from a file you exported") {
+            importLauncher.launch(arrayOf("*/*"))
+        })
 
         // --- Keyboard shortcut, last on the page so touch-screen users never need it ---
         val shortcutSection = vertical(0)
@@ -453,6 +470,39 @@ class MainActivity : AppCompatActivity() {
     private fun onUpdateTapped() {
         val release = update ?: return
         updateAction.onTap(release)
+    }
+
+    private fun exportSettings(uri: android.net.Uri) {
+        try {
+            contentResolver.openOutputStream(uri)?.use { it.write(SettingsBackup.export(prefs().all).toByteArray()) }
+            Toast.makeText(this, "Settings saved. The file includes your API key, so keep it private.", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Couldn't save the settings file.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun importSettings(uri: android.net.Uri) {
+        val values = try {
+            contentResolver.openInputStream(uri)?.use { SettingsBackup.parse(it.readBytes().toString(Charsets.UTF_8)) }
+        } catch (e: Exception) {
+            null
+        }
+        if (values == null) {
+            Toast.makeText(this, "That isn't a Word for Word settings file.", Toast.LENGTH_LONG).show()
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Import settings?")
+            .setMessage("This replaces all your current settings, including your API key.")
+            .setPositiveButton("Import") { _, _ ->
+                SettingsBackup.apply(prefs(), values)
+                WhisperAccessibilityService.instance?.applyShortcutSettings()
+                UpdateNotifier.schedule(this)
+                refresh()
+                Toast.makeText(this, "Settings imported", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun setAccPhase(phase: Int) = prefs().edit().putInt("acc_setup_phase", phase).apply()
