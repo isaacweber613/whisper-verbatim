@@ -32,6 +32,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var updateRowSub: TextView
     private var update: Updater.Release? = null
     private lateinit var updateAction: UpdateAction
+    private var updateChecking = false
+    private lateinit var updateNotifySwitch: MaterialSwitch
+    private lateinit var updateNotifyRowSub: TextView
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
     private lateinit var cloudModelRowSub: TextView
@@ -102,7 +105,6 @@ class MainActivity : AppCompatActivity() {
         updateAction = UpdateAction(this, updateRowSub)
         updateRow.visibility = View.GONE
         root.addView(updateRow)
-        checkForUpdate()
 
         // --- Setup Section ---
         root.addView(sectionHeader("Setup"))
@@ -201,6 +203,20 @@ class MainActivity : AppCompatActivity() {
         keyRowSub = keyRow.findViewWithTag("subtitle")
         root.addView(keyRow)
 
+        updateNotifySwitch = MaterialSwitch(this).apply { isClickable = false }
+        val updateNotifyRow = settingsRow("Update notifications", "", updateNotifySwitch) {
+            val on = !UpdateNotifier.enabled(this)
+            UpdateNotifier.setEnabled(this, on)
+            // Android 13+ asks once whether the app may show notifications.
+            if (on && android.os.Build.VERSION.SDK_INT >= 33 &&
+                !hasPerm(Manifest.permission.POST_NOTIFICATIONS)) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
+            }
+            refresh()
+        }
+        updateNotifyRowSub = updateNotifyRow.findViewWithTag("subtitle")
+        root.addView(updateNotifyRow)
+
         // --- Keyboard shortcut, last on the page so touch-screen users never need it ---
         val shortcutSection = vertical(0)
         root.addView(shortcutSection)
@@ -257,6 +273,8 @@ class MainActivity : AppCompatActivity() {
         // The service can finish turning on a moment after you return from Settings; update when it does.
         WhisperAccessibilityService.onStateChanged = { refresh(); maybeRunSetup() }
         refresh(); maybeRunSetup()
+        // Reopening from recent apps doesn't restart the screen, so check here, not only at start.
+        checkForUpdate()
     }
 
     override fun onPause() {
@@ -407,9 +425,13 @@ class MainActivity : AppCompatActivity() {
     private fun currentVersion(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
 
     private fun checkForUpdate() {
+        if (updateChecking) return
+        updateChecking = true
         val current = currentVersion()
         Thread {
-            val release = Updater.checkForUpdate(current) ?: return@Thread
+            val release = Updater.checkForUpdate(current)
+            runOnUiThread { updateChecking = false }
+            if (release == null) return@Thread
             runOnUiThread {
                 update = release
                 (updateRow.getChildAt(0) as? LinearLayout)?.let { texts ->
@@ -680,6 +702,15 @@ class MainActivity : AppCompatActivity() {
         }
         statusSubtitle.setTextColor(if (ready) attrColor(com.google.android.material.R.attr.colorPrimary) else attrColor(android.R.attr.textColorSecondary))
         
+        val notifyOn = UpdateNotifier.enabled(this)
+        updateNotifySwitch.isChecked = notifyOn
+        updateNotifyRowSub.text = when {
+            !notifyOn -> "Off"
+            android.os.Build.VERSION.SDK_INT >= 33 && !hasPerm(Manifest.permission.POST_NOTIFICATIONS) ->
+                "On, but notifications are blocked. Allow them for Word for Word in Android settings"
+            else -> "On: a notification when a new version is out"
+        }
+
         shortcutSwitch.isChecked = shortcutOn
         shortcutRowSub.text = if (shortcutOn) "On. The mic button shows only while you talk" else "Off"
         shortcutKeysRow.visibility = if (shortcutOn) View.VISIBLE else View.GONE

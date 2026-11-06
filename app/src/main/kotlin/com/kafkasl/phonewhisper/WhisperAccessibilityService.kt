@@ -104,7 +104,10 @@ class WhisperAccessibilityService : AccessibilityService() {
         handler.post { onStateChanged?.invoke() }
         showOverlay()
         applyShortcutSettings()
-        // Debug builds only: lets tests type text as if it were dictated, since emulators have no voice.
+        // The daily update check's alarm is cleared when the phone restarts; this service starts with the phone.
+        UpdateNotifier.schedule(this)
+        // Debug builds only: lets tests type text as if it were dictated, since emulators have no voice,
+        // and run the daily update check now.
         //   adb shell am broadcast -a com.isaacweber.wordforword.DEBUG_DICTATE --es text "hello"
         if (BuildConfig.DEBUG) {
             androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
@@ -112,6 +115,13 @@ class WhisperAccessibilityService : AccessibilityService() {
                     handleTranscriptionResult(i.getStringExtra("text"), "debug")
                 }
             }, android.content.IntentFilter("com.isaacweber.wordforword.DEBUG_DICTATE"),
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
+            // adb shell am broadcast -a com.isaacweber.wordforword.DEBUG_UPDATE_CHECK
+            androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: Context, i: android.content.Intent) {
+                    thread { UpdateNotifier.checkAndNotify(applicationContext) }
+                }
+            }, android.content.IntentFilter("com.isaacweber.wordforword.DEBUG_UPDATE_CHECK"),
                 androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
         }
         // Try to load local model in background
@@ -856,10 +866,12 @@ class WhisperAccessibilityService : AccessibilityService() {
         val selStart = node.textSelectionStart
         val selEnd = node.textSelectionEnd
         // On Android 7 and older (and in some apps), an empty box reports its grey placeholder,
-        // like "Type a message...", as its text, with no cursor position. Real text always has a
-        // cursor. So text without a cursor gets pasted at the box's real cursor instead: the
-        // placeholder never gets typed, and real text, if that's what it was, stays untouched.
-        if (current.isNotEmpty() && selStart < 0) {
+        // like "Type a message...", as its text, with no cursor or the cursor at the start.
+        // So text with the cursor missing or at the start gets pasted at the box's real cursor
+        // instead: the placeholder never gets typed, and real text, if that's what it was, stays
+        // untouched with the words added where the cursor is. (A friend's build also treats a
+        // cursor at the start as a placeholder sign.)
+        if (current.isNotEmpty() && selStart <= 0 && selEnd <= 0) {
             val clip = ClipData.newPlainText("Word for Word", text)
             (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
             val ok = tryPaste(node)
