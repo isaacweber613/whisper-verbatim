@@ -39,6 +39,10 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.findByName("upload")
+            // Remove library code and resources the app never uses.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 
