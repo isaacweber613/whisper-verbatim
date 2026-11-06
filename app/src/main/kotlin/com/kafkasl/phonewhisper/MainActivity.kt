@@ -66,9 +66,9 @@ class MainActivity : AppCompatActivity() {
 
         // Top large header (like "Connected devices")
         val header = TextView(this).apply {
-            text = "Whisper Verbatim"
+            text = "Word for Word"
             textSize = 32f
-            setPadding(dp(24), dp(64), dp(24), dp(24))
+            setPadding(dp(24), dp(32), dp(24), dp(24))
         }
         root.addView(header)
 
@@ -172,6 +172,15 @@ class MainActivity : AppCompatActivity() {
         setContentView(ScrollView(this).apply {
             setBackgroundColor(attrColor(android.R.attr.colorBackground))
             addView(root)
+            // Android 15+ draws apps under the status and navigation bars; pad so nothing hides behind them.
+            clipToPadding = false
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
+                val bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                    androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+                v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                insets
+            }
         })
 
         // The setup walkthrough (maybeRunSetup) asks for the microphone, so no request here.
@@ -263,8 +272,8 @@ class MainActivity : AppCompatActivity() {
         setupDialog = android.app.AlertDialog.Builder(this)
             .setTitle("Microphone needed")
             .setMessage(
-                if (canAskAgain) "Whisper Verbatim needs the microphone to record what you say. Tap Ask again and choose \"While using the app.\""
-                else "Whisper Verbatim needs the microphone to record what you say. Android won't ask again, so tap Open App info, tap Permissions, tap Microphone, and choose \"Allow only while using the app.\"")
+                if (canAskAgain) "Word for Word needs the microphone to record what you say. Tap Ask again and choose \"While using the app.\""
+                else "Word for Word needs the microphone to record what you say. Android won't ask again, so tap Open App info, tap Permissions, tap Microphone, and choose \"Allow only while using the app.\"")
             .setCancelable(false)
             .setPositiveButton(if (canAskAgain) "Ask again" else "Open App info") { _, _ ->
                 if (canAskAgain) ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
@@ -283,12 +292,15 @@ class MainActivity : AppCompatActivity() {
      * service turns on at any point (some phones never block it), the walkthrough moves on.
      */
     private fun showAccessibilityStep() {
+        // Google Play requires this disclosure, and a clear yes, before sending anyone to turn the service on.
+        if (!prefs().getBoolean("acc_disclosure_agreed", false)) { showAccessibilityDisclosure(); return }
+        // Android only blocks the service as a "restricted setting" for apps not installed from an app store.
+        if (installedFromStore() && prefs().getInt("acc_setup_phase", 0) < 2) setAccPhase(2)
         val phase = prefs().getInt("acc_setup_phase", 0)
-        val b = setupBuilder(1, "Accessibility (part ${phase + 1} of 3)")
+        val b = setupBuilder(1, if (phase >= 2 && installedFromStore()) "Accessibility" else "Accessibility (part ${phase + 1} of 3)")
         when (phase) {
             0 -> b.setMessage(
-                    "Whisper Verbatim uses Android's accessibility service for one thing: typing your dictated text into the box you're in.\n\n" +
-                    "Tap Open Accessibility, then try to turn on Whisper Verbatim. Android will probably block it with a \"Restricted setting\" message, because the app didn't come from the Play Store. That's expected. Come back here after.")
+                    "Tap Open Accessibility, then try to turn on Word for Word. Android will probably block it with a \"Restricted setting\" message, because the app didn't come from the Play Store. That's expected. Come back here after.")
                 .setPositiveButton("Open Accessibility") { _, _ ->
                     setAccPhase(1); openAccessibilitySettings()
                 }
@@ -301,7 +313,8 @@ class MainActivity : AppCompatActivity() {
                     setAccPhase(2); openAccessibilitySettings()
                 }
             else -> b.setMessage(
-                    "Last part. Tap Open Accessibility and turn on Whisper Verbatim.\n\n" +
+                    if (installedFromStore()) "Tap Open Accessibility, tap Word for Word, and turn it on."
+                    else "Last part. Tap Open Accessibility and turn on Word for Word.\n\n" +
                     "If it's still blocked, tap App info and allow restricted settings again.")
                 .setPositiveButton("Open Accessibility") { _, _ -> openAccessibilitySettings() }
                 .setNeutralButton("App info") { _, _ -> openAppInfo() }
@@ -312,7 +325,38 @@ class MainActivity : AppCompatActivity() {
     private fun setAccPhase(phase: Int) = prefs().edit().putInt("acc_setup_phase", phase).apply()
 
     /**
-     * Opens Android's accessibility list with Whisper Verbatim highlighted. (Jumping straight
+     * The "prominent disclosure" Google Play requires for apps that use the accessibility
+     * service: what the app can see, what it does with it, and an explicit Agree button.
+     */
+    private fun showAccessibilityDisclosure() {
+        setupDialog = setupBuilder(1, "How Word for Word uses Accessibility")
+            .setMessage(
+                "Word for Word uses Android's Accessibility service to do two things:\n\n" +
+                "• Show the floating dictation button while your keyboard is open.\n" +
+                "• Type your dictated words into the text box you're in.\n\n" +
+                "To do this, the app looks at the text box you're in and the text already in it, so it can add your words at the cursor " +
+                "and skip grey placeholder text like \"Message.\" It looks only when you tap into a text box or tap the floating button.\n\n" +
+                "Word for Word doesn't save, collect, or share anything it reads on your screen. " +
+                "Your recording goes only to the transcription service you set up (OpenRouter), using your own API key.\n\n" +
+                "Tap Agree to continue to Android's Accessibility settings.")
+            .setPositiveButton("Agree") { _, _ ->
+                prefs().edit().putBoolean("acc_disclosure_agreed", true).apply()
+                showAccessibilityStep()
+            }
+            .setNegativeButton("No thanks") { _, _ -> setupSnoozed = true }
+            .show()
+    }
+
+    /** True when the Play Store (or another app store) installed the app, rather than a downloaded APK. */
+    private fun installedFromStore(): Boolean = try {
+        val installer = packageManager.getInstallSourceInfo(packageName).installingPackageName
+        installer != null && installer != "com.google.android.packageinstaller" && installer != "com.android.packageinstaller"
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * Opens Android's accessibility list with Word for Word highlighted. (Jumping straight
      * to the app's own page needs a permission only system apps get, so the list is as close as
      * a regular app can go.)
      */

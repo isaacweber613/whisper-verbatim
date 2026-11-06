@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/logo.svg" width="128" height="128" alt="Phone Whisper Logo">
+  <img src="docs/word-for-word-icon.svg" width="128" height="128" alt="Word for Word logo">
 </p>
 
-# Whisper Verbatim (a fork of Phone Whisper)
+# Word for Word (a fork of Phone Whisper)
 
-Whisper Verbatim is a fork of [kafkasl/phone-whisper](https://github.com/kafkasl/phone-whisper) for people who want
+Word for Word (formerly Whisper Verbatim) is a fork of [kafkasl/phone-whisper](https://github.com/kafkasl/phone-whisper) for people who want
 **verbatim** dictation: your exact words, including "um," "uh," repeats, and mistakes, with no AI rewording.
 
 ### Changes in this fork
@@ -22,11 +22,16 @@ Whisper Verbatim is a fork of [kafkasl/phone-whisper](https://github.com/kafkasl
   microphone busy, nothing heard), and the app checks your key with OpenRouter when you save it.
 - **Cloud-only**: the local (on-phone) models, the cloud on/off switch, and the AI "cleanup" option are removed,
   since this fork never rewrites your words.
-- The app is renamed Whisper Verbatim (package `com.isaacweber.whisperverbatim`), so it installs alongside the original.
+- **Voice-level bars**: while recording, the floating button shows bars that move with your voice.
+- **Skips placeholder text**: grey hint text like WhatsApp's "Message" is never typed in front of your words.
+- The app is named Word for Word (package `com.isaacweber.wordforword`), so it installs alongside the original.
+  Versions before 0.5.0 were called Whisper Verbatim and used a different package, so 0.5.0 installs as a separate app.
+  Uninstall Whisper Verbatim after you set up Word for Word.
+- [Privacy policy](PRIVACY.md)
 
 ### Install
 
-Download `WhisperVerbatim.apk` from the [latest release](https://github.com/isaacweber613/whisper-verbatim/releases/latest)
+Download `WordForWord.apk` from the [latest release](https://github.com/isaacweber613/whisper-verbatim/releases/latest)
 and open it on your phone. The app walks you through the microphone, accessibility, and OpenRouter key setup.
 
 The original project's README follows.

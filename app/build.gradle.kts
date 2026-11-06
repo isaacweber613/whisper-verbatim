@@ -1,20 +1,45 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
+// Upload-key details live in keystore.properties, which is never committed.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "com.kafkasl.phonewhisper"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.isaacweber.whisperverbatim"
+        applicationId = "com.isaacweber.wordforword"
         minSdk = 30
-        targetSdk = 34
-        versionCode = 3
-        versionName = "0.4.0"
+        targetSdk = 36
+        versionCode = 4
+        versionName = "0.5.0"
 
         ndk { abiFilters += "arm64-v8a" }
+    }
+
+    signingConfigs {
+        if (keystoreProps.getProperty("storeFile") != null) {
+            create("upload") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.findByName("upload")
+        }
     }
 
     compileOptions {

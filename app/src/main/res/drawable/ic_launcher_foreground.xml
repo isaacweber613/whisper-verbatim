@@ -1,28 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Word for Word: a microphone next to a text cursor ("what you say gets typed"). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Mic capsule -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M54,20c-7.73,0 -14,6.27 -14,14v18c0,7.73 6.27,14 14,14s14,-6.27 14,-14V34c0,-7.73 -6.27,-14 -14,-14z" />
+        android:pathData="M42,26c-4.97,0 -9,4.03 -9,9v10c0,4.97 4.03,9 9,9s9,-4.03 9,-9V35c0,-4.97 -4.03,-9 -9,-9z" />
+    <!-- Mic cradle, stand, and base -->
     <path
         android:fillColor="#00000000"
-        android:pathData="M30,52c0,13.25 10.75,24 24,24s24,-10.75 24,-24"
+        android:pathData="M28,45a14,14 0 0,0 28,0M42,59v11M35,72h14"
         android:strokeColor="#FFFFFFFF"
         android:strokeLineCap="round"
-        android:strokeWidth="6" />
+        android:strokeWidth="5" />
+    <!-- Text cursor -->
     <path
         android:fillColor="#00000000"
-        android:pathData="M54,76v12"
+        android:pathData="M70,32V76M64,32h12M64,76h12"
         android:strokeColor="#FFFFFFFF"
         android:strokeLineCap="round"
-        android:strokeWidth="6" />
-    <path
-        android:fillColor="#00000000"
-        android:pathData="M42,90h24"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeLineCap="round"
-        android:strokeWidth="6" />
+        android:strokeWidth="5" />
 </vector>

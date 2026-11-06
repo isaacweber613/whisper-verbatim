@@ -49,6 +49,12 @@ class WhisperAccessibilityService : AccessibilityService() {
         private const val COLOR_BUSY = 0xDD6B6B6B.toInt()
         private const val COLOR_FEEDBACK_BG = 0xEE1C1C1E.toInt()
         private const val COLOR_RING = 0xFFE8EAED.toInt()
+
+        /** WhatsApp's message box doesn't always flag its "Message" placeholder. */
+        private val BUILT_IN_PLACEHOLDERS = setOf(
+            "com.whatsapp/com.whatsapp:id/entry|Message",
+            "com.whatsapp.w4b/com.whatsapp.w4b:id/entry|Message",
+        )
     }
 
     private enum class State { IDLE, RECORDING, TRANSCRIBING }
@@ -56,6 +62,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     private var state = State.IDLE
     private var overlayView: FrameLayout? = null
     private var button: ImageView? = null
+    private var bars: LevelBarsView? = null
     private var spinner: ProgressBar? = null
     private var feedbackView: TextView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
@@ -85,6 +92,12 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // When you tap into an empty box, learn its placeholder so it never gets typed later.
+        if (event?.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
+            event.source?.let { src ->
+                try { if (src.isEditable) isPlaceholder(src) } catch (_: Exception) {}
+            }
+        }
         // Windows (including the keyboard) opened, closed, or focus moved. Re-check
         // after a short pause so a burst of events causes one update.
         scheduleVisibilityUpdate()
@@ -176,9 +189,13 @@ class WhisperAccessibilityService : AccessibilityService() {
             background = circle(COLOR_IDLE)
         }
 
+        val levelBars = LevelBarsView(this).apply { visibility = View.GONE }
+        val barsSize = (buttonSize * 0.6f).toInt()
+
         val overlay = FrameLayout(this).apply {
             addView(ring, FrameLayout.LayoutParams(ringSize, ringSize, Gravity.CENTER))
             addView(img, FrameLayout.LayoutParams(buttonSize, buttonSize, Gravity.CENTER))
+            addView(levelBars, FrameLayout.LayoutParams(barsSize, barsSize, Gravity.CENTER))
         }
 
         val params = WindowManager.LayoutParams(
@@ -256,6 +273,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         wm.addView(feedback, feedbackParams)
         overlayView = overlay
         button = img
+        bars = levelBars
         spinner = ring
         feedbackView = feedback
         layoutParams = params
@@ -279,6 +297,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             feedbackView = null
         }
         button = null
+        bars = null
         spinner = null
         layoutParams = null
         feedbackLayoutParams = null
@@ -337,19 +356,34 @@ class WhisperAccessibilityService : AccessibilityService() {
         }
     }
 
+    /** Swaps the mic icon for bars that move with your voice. */
     private fun startPulse() {
-        button?.let {
-            it.animate().alpha(0.4f).setDuration(500).withEndAction {
-                it.animate().alpha(1f).setDuration(500).withEndAction {
-                    if (state == State.RECORDING) startPulse()
-                }.start()
-            }.start()
+        handler.post {
+            button?.setImageDrawable(null)
+            bars?.start()
         }
     }
 
     private fun stopPulse() {
-        button?.animate()?.cancel()
-        button?.alpha = 1f
+        handler.post {
+            bars?.stop()
+            button?.setImageResource(R.drawable.ic_mic)
+        }
+    }
+
+    /** Loudness of a chunk of 16-bit audio, scaled so normal speech fills most of the bars. */
+    private fun levelOf(buf: ByteArray, n: Int): Float {
+        var sum = 0.0
+        val samples = n / 2
+        if (samples == 0) return 0f
+        for (i in 0 until samples) {
+            val s = ((buf[i * 2 + 1].toInt() shl 8) or (buf[i * 2].toInt() and 0xFF)).toShort().toInt()
+            sum += s.toDouble() * s
+        }
+        val rms = kotlin.math.sqrt(sum / samples)
+        // Map roughly -50 dB (room noise) .. -10 dB (loud speech) onto 0..1.
+        val db = 20 * kotlin.math.log10(rms / 32768.0 + 1e-9)
+        return ((db + 50) / 40).toFloat().coerceIn(0f, 1f)
     }
 
     // --- State machine ---
@@ -365,7 +399,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     private fun startRecording() {
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            toast("Microphone permission is off. Open Whisper Verbatim to turn it on."); return
+            toast("Microphone permission is off. Open Word for Word to turn it on."); return
         }
 
         val bufSize = AudioRecord.getMinBufferSize(
@@ -376,7 +410,7 @@ class WhisperAccessibilityService : AccessibilityService() {
                 MediaRecorder.AudioSource.MIC, SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufSize
             )
-        } catch (_: SecurityException) { toast("Microphone permission is off. Open Whisper Verbatim to turn it on."); return }
+        } catch (_: SecurityException) { toast("Microphone permission is off. Open Word for Word to turn it on."); return }
 
         // Fails when another app (a call, a voice recorder) is holding the microphone.
         val started = try {
@@ -398,7 +432,10 @@ class WhisperAccessibilityService : AccessibilityService() {
             val buf = ByteArray(bufSize)
             while (state == State.RECORDING) {
                 val n = audioRecord?.read(buf, 0, buf.size) ?: break
-                if (n > 0) pcmStream?.write(buf, 0, n)
+                if (n > 0) {
+                    pcmStream?.write(buf, 0, n)
+                    bars?.setLevel(levelOf(buf, n))
+                }
             }
         }
     }
@@ -456,7 +493,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     private fun transcribeApi(pcm: ByteArray) {
         val wav = WavWriter.encode(pcm)
         val apiKey = prefs().getString("api_key", "") ?: ""
-        if (apiKey.isBlank()) { reset("Set your OpenRouter API key in the Whisper Verbatim app"); return }
+        if (apiKey.isBlank()) { reset("Set your OpenRouter API key in the Word for Word app"); return }
 
         val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
         val verbatim = prefs().getBoolean("verbatim", true)
@@ -560,7 +597,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             }
             // Second pass, only for boxes that refuse direct typing: clipboard + paste.
             if (!typed) {
-                val clip = ClipData.newPlainText("Whisper Verbatim", text)
+                val clip = ClipData.newPlainText("Word for Word", text)
                 (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
                 var pasted = false
                 for (candidate in candidates) {
@@ -655,8 +692,9 @@ class WhisperAccessibilityService : AccessibilityService() {
         logNode("Trying node", node)
         if (!node.isEditable && node.className?.toString()?.contains("EditText") != true) return false
 
-        // An empty box reports its grey placeholder as its text; treat that as empty.
-        val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
+        // Read the box fresh, not from Android's cache, so the placeholder flag is current.
+        node.refresh()
+        val current = if (isPlaceholder(node)) "" else node.text?.toString().orEmpty()
         val selStart = node.textSelectionStart
         val selEnd = node.textSelectionEnd
         val start = if (selStart in 0..current.length) selStart else current.length
@@ -682,6 +720,44 @@ class WhisperAccessibilityService : AccessibilityService() {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursor)
         })
         return true
+    }
+
+    /**
+     * An empty box reports its grey placeholder ("Message" in WhatsApp) as its text.
+     * Some apps flag this correctly and some only sometimes, so this checks three ways:
+     * the flag, the box's declared placeholder, and placeholders this box showed before.
+     */
+    private fun isPlaceholder(node: AccessibilityNodeInfo): Boolean {
+        val text = node.text?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) return true
+        val key = placeholderKey(node)
+        if (node.isShowingHintText) {
+            rememberPlaceholder(key, text)
+            return true
+        }
+        val hint = node.hintText?.toString()?.trim()
+        if (!hint.isNullOrEmpty() && text == hint) {
+            rememberPlaceholder(key, text)
+            return true
+        }
+        return key != null && knownPlaceholders().contains("$key|$text")
+    }
+
+    /** Identifies a text box by app and view ID, for example WhatsApp's message box. */
+    private fun placeholderKey(node: AccessibilityNodeInfo): String? {
+        val id = node.viewIdResourceName ?: return null
+        return "${node.packageName}/$id"
+    }
+
+    private fun knownPlaceholders(): Set<String> =
+        BUILT_IN_PLACEHOLDERS + (prefs().getStringSet("known_placeholders", emptySet()) ?: emptySet())
+
+    private fun rememberPlaceholder(key: String?, text: String) {
+        if (key == null) return
+        val entry = "$key|$text"
+        val known = knownPlaceholders()
+        if (entry in known) return
+        prefs().edit().putStringSet("known_placeholders", known + entry).apply()
     }
 
     /** Fallback for boxes that won't take typed text: paste whatever is on the clipboard. */

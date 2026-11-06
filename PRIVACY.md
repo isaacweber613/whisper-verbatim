@@ -1,39 +1,39 @@
-# Privacy Policy for Phone Whisper
+# Privacy policy for Word for Word
 
-Phone Whisper is an Android dictation app that records speech, transcribes it, and inserts the result into text fields across apps.
+Word for Word is an Android dictation app. You tap a floating button, speak, and the app types your exact words into the text box you're in.
 
-## Data handling
+## What happens to your recording
 
-Phone Whisper supports two transcription modes.
+When you tap the floating button, the app records audio from the microphone until you tap again. The app sends that recording directly from your phone to OpenRouter, using the OpenRouter API key you entered, to turn it into text. OpenRouter passes the audio to the speech-to-text model you picked in the app.
 
-### Local mode
+The app doesn't send your audio or text anywhere else. There is no Word for Word server.
 
-In local mode, audio is processed on-device using local speech recognition models. Audio does not leave the device.
+OpenRouter and the model provider handle your audio under their own terms and privacy policies.
 
-### Cloud mode
+## What stays on your phone
 
-In cloud mode, recorded audio is sent directly from the device to OpenAI's transcription API to generate text.
+- **Your OpenRouter API key**, stored in the app's private storage.
+- **Your transcription history**, stored in the app's private storage. By default the app deletes entries after 24 hours. You can choose to keep them, and you can delete them at any time.
 
-If optional cleanup is enabled, the transcribed text is also sent directly from the device to OpenAI's chat API to improve punctuation, capitalization, and clarity.
+Uninstalling the app deletes both.
 
-## API keys
+## Accessibility service
 
-If you use cloud features, your OpenAI API key is stored locally on your device in app storage and used to authenticate requests sent directly to OpenAI.
+Word for Word uses Android's Accessibility service for two things:
 
-I do not operate a relay server for these requests.
+- Showing the floating dictation button while your keyboard is open.
+- Typing your dictated words into the text box you're in.
 
-## Accessibility Service
-
-Phone Whisper uses Android Accessibility Service only to identify the currently focused text field and insert dictated text after you explicitly interact with the floating overlay button.
-
-Phone Whisper is not designed to monitor browsing, collect screen content for analytics, or perform background automation.
+To do this, the app looks at the text box you're in and the text already in it, so it can add your words at the cursor and skip grey placeholder text. It looks only when you tap into a text box or tap the floating button. The app doesn't save, collect, or share anything it reads on your screen.
 
 ## Data collection
 
-I do not run a backend for Phone Whisper and do not collect user accounts, analytics, or uploaded recordings myself.
+Word for Word has no accounts, no analytics, no ads, and no crash reporting. The developer doesn't receive your recordings, your text, or your API key.
 
-Third-party services you choose to use, such as OpenAI, may process data according to their own terms and privacy policies.
+## Open source
+
+Word for Word is open source, based on [Phone Whisper](https://github.com/kafkasl/phone-whisper). You can read the code at [github.com/isaacweber613/whisper-verbatim](https://github.com/isaacweber613/whisper-verbatim).
 
 ## Contact
 
-For questions about privacy, contact: pol.avms@gmail.com
+For privacy questions, open an issue at [github.com/isaacweber613/whisper-verbatim/issues](https://github.com/isaacweber613/whisper-verbatim/issues).

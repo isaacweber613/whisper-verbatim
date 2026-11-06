@@ -92,7 +92,7 @@ object TranscriberClient {
         val request = Request.Builder()
             .url("https://openrouter.ai/api/v1/audio/transcriptions")
             .header("Authorization", "Bearer $apiKey")
-            .header("X-Title", "Phone Whisper Verbatim")
+            .header("X-Title", "Word for Word")
             .post(buildBody(wavData, model, verbatim).toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -118,10 +118,10 @@ object TranscriberClient {
 
     /** Plain-language message for an error answer from OpenRouter, by HTTP status code. */
     fun httpError(code: Int, detail: String?, model: String): String = when (code) {
-        401 -> "OpenRouter rejected your API key. Open Whisper Verbatim and check the key."
+        401 -> "OpenRouter rejected your API key. Open Word for Word and check the key."
         402 -> "Your OpenRouter account is out of credit. Add credit at openrouter.ai."
         403 -> "OpenRouter refused the request: ${detail ?: "forbidden"}."
-        404 -> "OpenRouter doesn't have the model \"$model\". Pick another in Whisper Verbatim."
+        404 -> "OpenRouter doesn't have the model \"$model\". Pick another in Word for Word."
         408, 504 -> "The transcription service timed out. Try again."
         413 -> "That recording is too long to send in one piece. Try a shorter one."
         429 -> "Too many requests right now. Wait a moment and try again."
