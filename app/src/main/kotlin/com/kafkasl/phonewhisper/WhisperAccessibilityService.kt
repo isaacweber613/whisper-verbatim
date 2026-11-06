@@ -85,7 +85,9 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     /** Set when the keyboard shortcut is on; the mic button then shows only while you talk. */
     private var shortcut: ShortcutMatcher? = null
-    private val shortcutHeld = Runnable { if (shortcut?.holdElapsed() == true) onTap() }
+    private val shortcutHeld = Runnable {
+        if (shortcut?.holdElapsed(android.os.SystemClock.uptimeMillis()) == true) onTap()
+    }
     /** Keeps the button up while a "couldn't type here" message shows. */
     private var showingPasteFailure = false
     private val endPasteFailure = Runnable { showingPasteFailure = false; scheduleVisibilityUpdate() }
@@ -102,6 +104,16 @@ class WhisperAccessibilityService : AccessibilityService() {
         handler.post { onStateChanged?.invoke() }
         showOverlay()
         applyShortcutSettings()
+        // Debug builds only: lets tests type text as if it were dictated, since emulators have no voice.
+        //   adb shell am broadcast -a com.isaacweber.wordforword.DEBUG_DICTATE --es text "hello"
+        if (BuildConfig.DEBUG) {
+            androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
+                override fun onReceive(c: Context, i: android.content.Intent) {
+                    handleTranscriptionResult(i.getStringExtra("text"), "debug")
+                }
+            }, android.content.IntentFilter("com.isaacweber.wordforword.DEBUG_DICTATE"),
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
+        }
         // Try to load local model in background
         thread { initLocalModel() }
     }
@@ -140,7 +152,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         val m = shortcut ?: return false
         if (capturingShortcut) return false
         when (event.action) {
-            KeyEvent.ACTION_DOWN -> when (m.onDown(event.keyCode, event.repeatCount)) {
+            KeyEvent.ACTION_DOWN -> when (m.onDown(event.keyCode, event.repeatCount, event.eventTime)) {
                 ShortcutMatcher.Result.FIRE -> onTap()
                 ShortcutMatcher.Result.WAIT -> {
                     handler.removeCallbacks(shortcutHeld)
@@ -148,7 +160,7 @@ class WhisperAccessibilityService : AccessibilityService() {
                 }
                 ShortcutMatcher.Result.NONE -> Unit
             }
-            KeyEvent.ACTION_UP -> m.onUp(event.keyCode)
+            KeyEvent.ACTION_UP -> m.onUp(event.keyCode, event.eventTime)
         }
         return m.blocks(event.keyCode)
     }
@@ -444,6 +456,20 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     /** Swaps the mic icon for bars that move with your voice. */
+    /** A short buzz when recording starts or stops with the keyboard shortcut on. */
+    private fun buzz() {
+        if (shortcut == null) return
+        try {
+            val vibrator = getSystemService(VIBRATOR_SERVICE) as? android.os.Vibrator ?: return
+            if (android.os.Build.VERSION.SDK_INT >= 26) {
+                vibrator.vibrate(android.os.VibrationEffect.createOneShot(60, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION") vibrator.vibrate(60)
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     private fun startPulse() {
         handler.post {
             button?.setImageDrawable(null)
@@ -542,6 +568,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         setBusy(false)
         setAppearance(COLOR_RECORDING)
         startPulse()
+        buzz()
 
         thread {
             val buf = ByteArray(bufSize)
@@ -558,6 +585,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     private fun stopAndTranscribe() {
         state = State.TRANSCRIBING
         stopPulse()
+        buzz()
         setAppearance(COLOR_BUSY)
         setBusy(true)
 
@@ -827,6 +855,17 @@ class WhisperAccessibilityService : AccessibilityService() {
         val current = if (isPlaceholder(node)) "" else node.text?.toString().orEmpty()
         val selStart = node.textSelectionStart
         val selEnd = node.textSelectionEnd
+        // On Android 7 and older (and in some apps), an empty box reports its grey placeholder,
+        // like "Type a message...", as its text, with no cursor position. Real text always has a
+        // cursor. So text without a cursor gets pasted at the box's real cursor instead: the
+        // placeholder never gets typed, and real text, if that's what it was, stays untouched.
+        if (current.isNotEmpty() && selStart < 0) {
+            val clip = ClipData.newPlainText("Word for Word", text)
+            (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+            val ok = tryPaste(node)
+            Log.i(TAG, "No cursor in a box with text; pasted => $ok")
+            if (ok) return true
+        }
         val start = if (selStart in 0..current.length) selStart else current.length
         val end = if (selEnd in 0..current.length) selEnd else start
         val from = minOf(start, end)

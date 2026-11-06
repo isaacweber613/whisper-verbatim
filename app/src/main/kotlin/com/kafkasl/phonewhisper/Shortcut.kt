@@ -63,33 +63,65 @@ object Shortcut {
  * [blocks] hides that key from apps.
  */
 class ShortcutMatcher(private val keys: Set<Int>, private val holdMs: Long, private val blockKey: Boolean = false) {
+    companion object {
+        /**
+         * Some flip phones (seen on a friend's Kyocera, 2026-11-06) report one press of a key
+         * twice. That started recording and stopped it right away, ending in "No speech
+         * detected". A shortcut key pressed again within this time after letting go is ignored.
+         */
+        const val BOUNCE_MS = 300L
+        /** A second start or stop within this time of the last one is ignored. */
+        const val REFIRE_MS = 1000L
+    }
+
     /** True when this key's press, repeat or release should be hidden from apps. */
     fun blocks(code: Int) = blockKey && keys.size == 1 && code in keys
 
     enum class Result { NONE, FIRE, WAIT }
 
     private val down = mutableSetOf<Int>()
+    private val lastUp = mutableMapOf<Int, Long>()
+    private var lastFire: Long? = null
     private var armed = false
     private var fired = false
 
-    fun onDown(code: Int, repeatCount: Int): Result {
+    /** [time] is the key event's time in milliseconds (KeyEvent.eventTime). */
+    fun onDown(code: Int, repeatCount: Int, time: Long): Result {
         if (repeatCount > 0 || code in down) return Result.NONE
+        if (code in keys) {
+            val up = lastUp[code]
+            if (up != null && time - up < BOUNCE_MS) return Result.NONE
+        }
         down += code
         if (code !in keys || down != keys) return Result.NONE
         armed = true
-        fired = holdMs <= 0
-        return if (fired) Result.FIRE else Result.WAIT
+        if (holdMs > 0) {
+            fired = false
+            return Result.WAIT
+        }
+        fired = true
+        return if (allowFire(time)) Result.FIRE else Result.NONE
     }
 
     /** True once, when the hold time has passed and the shortcut keys are still held. */
-    fun holdElapsed(): Boolean {
+    fun holdElapsed(time: Long): Boolean {
         if (!armed || fired || down != keys) return false
         fired = true
-        return true
+        return allowFire(time)
     }
 
-    fun onUp(code: Int) {
+    fun onUp(code: Int, time: Long) {
         down -= code
-        if (code in keys) armed = false
+        if (code in keys) {
+            armed = false
+            lastUp[code] = time
+        }
+    }
+
+    private fun allowFire(time: Long): Boolean {
+        val last = lastFire
+        if (last != null && time - last < REFIRE_MS) return false
+        lastFire = time
+        return true
     }
 }
