@@ -28,6 +28,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioRowSub: TextView
     private lateinit var accRowSub: TextView
     private lateinit var keepRunningRowSub: TextView
+    private lateinit var updateRow: LinearLayout
+    private lateinit var updateRowSub: TextView
+    private var update: Updater.Release? = null
+    private var updateApk: File? = null
+    private var updateDownloading = false
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
     private lateinit var cloudModelRowSub: TextView
@@ -82,6 +87,13 @@ class MainActivity : AppCompatActivity() {
         }
         statusSubtitle = statusRow.findViewWithTag("subtitle")
         root.addView(statusRow)
+
+        // Shown only when GitHub has a newer release: tap to download, then tap to install.
+        updateRow = settingsRow("Update", "") { onUpdateTapped() }
+        updateRowSub = updateRow.findViewWithTag("subtitle")
+        updateRow.visibility = View.GONE
+        root.addView(updateRow)
+        checkForUpdate()
 
         // --- Setup Section ---
         root.addView(sectionHeader("Setup"))
@@ -346,6 +358,65 @@ class MainActivity : AppCompatActivity() {
             .setItems(items) { _, which -> BackgroundSettings.open(this, steps[which]) }
             .setNegativeButton("Close", null)
             .show()
+    }
+
+    // --- In-app updates ---
+
+    private fun currentVersion(): String = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
+
+    private fun checkForUpdate() {
+        val current = currentVersion()
+        Thread {
+            val release = Updater.checkForUpdate(current) ?: return@Thread
+            runOnUiThread {
+                update = release
+                (updateRow.getChildAt(0) as? LinearLayout)?.let { texts ->
+                    (texts.getChildAt(0) as? TextView)?.text = "Update to ${release.version}"
+                }
+                updateRowSub.text = "Tap to download"
+                updateRow.visibility = View.VISIBLE
+            }
+        }.start()
+    }
+
+    private fun onUpdateTapped() {
+        val release = update ?: return
+        if (updateDownloading) return
+        updateApk?.let { installUpdate(it); return }
+        updateDownloading = true
+        updateRowSub.text = "Downloading..."
+        Thread {
+            try {
+                val apk = Updater.download(this, release) { pct ->
+                    runOnUiThread { updateRowSub.text = "Downloading $pct%" }
+                }
+                runOnUiThread {
+                    updateApk = apk
+                    updateDownloading = false
+                    updateRowSub.text = "Tap to install"
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    updateDownloading = false
+                    updateRowSub.text = "Download failed. Tap to try again"
+                }
+            }
+        }.start()
+    }
+
+    private fun installUpdate(apk: File) {
+        // Android asks once whether this app may install apps.
+        if (!packageManager.canRequestPackageInstalls()) {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                android.net.Uri.parse("package:$packageName")))
+            Toast.makeText(this, "Allow Word for Word to install updates, then come back and tap Install", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            Updater.install(this, apk)
+        } catch (e: Exception) {
+            Toast.makeText(this, "The update didn't install. Try again.", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun setAccPhase(phase: Int) = prefs().edit().putInt("acc_setup_phase", phase).apply()
