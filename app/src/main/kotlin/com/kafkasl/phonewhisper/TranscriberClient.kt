@@ -42,6 +42,26 @@ object TranscriberClient {
             "Verbatim by default. Writes times with :00, so \"six\" becomes \"6:00.\"")
     )
 
+    /** Spoken-language choices besides "auto", where the model guesses. */
+    val LANGUAGES = linkedMapOf("he" to "Hebrew", "yi" to "Yiddish")
+
+    /**
+     * The language code each model is sent for each choice; a missing entry means the
+     * model guesses. Tested with real Yiddish through OpenRouter on 2026-11-05:
+     * GPT Transcribe rejects every Yiddish code ("yi", "yid") with error 400, and with
+     * Hebrew set it wrote Yiddish better than guessing, so Yiddish sends "he" to it.
+     * MAI-Transcribe 2 lists Hebrew but not Yiddish; Voxtral lists neither.
+     */
+    private val LANGUAGE_CODES = mapOf(
+        "elevenlabs/scribe-v2" to mapOf("he" to "he", "yi" to "yi"),
+        "openai/gpt-transcribe" to mapOf("he" to "he", "yi" to "he"),
+        "microsoft/mai-transcribe-2" to mapOf("he" to "he"),
+    )
+
+    fun languagesFor(model: String): List<String> = LANGUAGE_CODES[model]?.keys?.toList() ?: emptyList()
+
+    fun languageCode(model: String, language: String): String? = LANGUAGE_CODES[model]?.get(language)
+
     /** Shown in the app for a model ID: the friendly name for a built-in model, the raw ID for a custom one. */
     fun titleFor(id: String) = CLOUD_MODELS.firstOrNull { it.id == id }?.title ?: id
 
@@ -82,21 +102,22 @@ object TranscriberClient {
         .put("assemblyai", JSONObject().put("disfluencies", true))
 
     /** With verbatim off, no provider options are sent and each model uses its own default. */
-    fun buildBody(wavData: ByteArray, model: String, verbatim: Boolean): String {
+    fun buildBody(wavData: ByteArray, model: String, verbatim: Boolean, language: String = "auto"): String {
         val b64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
         val body = JSONObject()
             .put("model", model)
             .put("input_audio", JSONObject().put("data", b64).put("format", "wav"))
+        languageCode(model, language)?.let { body.put("language", it) }
         if (verbatim) body.put("provider", JSONObject().put("options", verbatimOptions()))
         return body.toString()
     }
 
-    fun transcribe(wavData: ByteArray, apiKey: String, model: String, verbatim: Boolean, callback: (Result) -> Unit) {
+    fun transcribe(wavData: ByteArray, apiKey: String, model: String, verbatim: Boolean, language: String, callback: (Result) -> Unit) {
         val request = Request.Builder()
             .url("https://openrouter.ai/api/v1/audio/transcriptions")
             .header("Authorization", "Bearer $apiKey")
             .header("X-Title", "Word for Word")
-            .post(buildBody(wavData, model, verbatim).toRequestBody("application/json".toMediaType()))
+            .post(buildBody(wavData, model, verbatim, language).toRequestBody("application/json".toMediaType()))
             .build()
 
         client.newCall(request).enqueue(object : Callback {

@@ -564,7 +564,8 @@ class WhisperAccessibilityService : AccessibilityService() {
 
         val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
         val verbatim = prefs().getBoolean("verbatim", true)
-        TranscriberClient.transcribe(wav, apiKey, model, verbatim) { result ->
+        val language = prefs().getString("language", "auto") ?: "auto"
+        TranscriberClient.transcribe(wav, apiKey, model, verbatim, language) { result ->
             if (result.text != null && result.text.isNotBlank()) {
                 handleTranscriptionResult(result.text)
             } else {

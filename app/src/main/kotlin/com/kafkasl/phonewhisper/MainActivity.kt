@@ -32,6 +32,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cloudModelRow: LinearLayout
     private lateinit var cloudModelRowSub: TextView
     private lateinit var verbatimRow: LinearLayout
+    private lateinit var languageRow: LinearLayout
+    private lateinit var languageRowSub: TextView
     private lateinit var historyRowSub: TextView
     private lateinit var promptRowSub: TextView
     private lateinit var promptRow: LinearLayout
@@ -139,6 +141,10 @@ class MainActivity : AppCompatActivity() {
             verbatimSwitch.isChecked = newVal
         }
         root.addView(verbatimRow)
+
+        languageRow = settingsRow("Language", "") { pickLanguage() }
+        languageRowSub = languageRow.findViewWithTag("subtitle")
+        root.addView(languageRow)
 
         // --- History ---
         root.addView(sectionHeader("History"))
@@ -552,8 +558,17 @@ class MainActivity : AppCompatActivity() {
         val historyCount = HistoryStore.all(this).size
         val keepForever = prefs().getBoolean("keep_history_forever", false)
         historyRowSub.text = "$historyCount saved · " + (if (keepForever) "kept forever" else "kept 24 hours") + ". Tap to view and copy"
-        cloudModelRowSub.text = TranscriberClient.summaryFor(
-            prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL)
+        val cloudModel = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
+        cloudModelRowSub.text = TranscriberClient.summaryFor(cloudModel)
+        // Only models that accept a language show the row.
+        val modelLanguages = TranscriberClient.languagesFor(cloudModel)
+        languageRow.visibility = if (useLocal || modelLanguages.isEmpty()) View.GONE else View.VISIBLE
+        val language = prefs().getString("language", "auto") ?: "auto"
+        languageRowSub.text = when {
+            language in modelLanguages -> TranscriberClient.LANGUAGES[language]
+            language == "auto" -> "Auto: the model guesses"
+            else -> "Auto: no ${TranscriberClient.LANGUAGES[language]} on this model"
+        }
         promptContainer.visibility = if (usePostProcessing) View.VISIBLE else View.GONE
         promptRow.visibility = if (usePostProcessing) View.VISIBLE else View.GONE
 
@@ -735,6 +750,22 @@ class MainActivity : AppCompatActivity() {
         dialog = android.app.AlertDialog.Builder(this)
             .setTitle("Cloud model")
             .setView(ScrollView(this).apply { addView(list) })
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Language picker: Auto plus the languages the chosen model accepts. */
+    private fun pickLanguage() {
+        val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
+        val keys = listOf("auto") + TranscriberClient.languagesFor(model)
+        val names = keys.map { if (it == "auto") "Auto" else TranscriberClient.LANGUAGES[it] }.toTypedArray()
+        val current = keys.indexOf(prefs().getString("language", "auto")).coerceAtLeast(0)
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Language")
+            .setSingleChoiceItems(names, current) { d, which ->
+                prefs().edit().putString("language", keys[which]).apply()
+                d.dismiss(); refresh()
+            }
             .setNegativeButton("Cancel", null)
             .show()
     }

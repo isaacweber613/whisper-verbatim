@@ -28,4 +28,13 @@ class TranscriberClientTest {
         assertNull(r.text)
         assertNotNull(r.error)
     }
+
+    @Test fun `language codes per model`() {
+        assertEquals("yi", TranscriberClient.languageCode("elevenlabs/scribe-v2", "yi"))
+        assertEquals("he", TranscriberClient.languageCode("openai/gpt-transcribe", "yi"))
+        assertEquals("he", TranscriberClient.languageCode("microsoft/mai-transcribe-2", "he"))
+        assertNull(TranscriberClient.languageCode("microsoft/mai-transcribe-2", "yi"))
+        assertNull(TranscriberClient.languageCode("elevenlabs/scribe-v2", "auto"))
+        assertTrue(TranscriberClient.languagesFor("mistralai/voxtral-mini-transcribe-3-0").isEmpty())
+    }
 }
