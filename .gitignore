@@ -8,3 +8,4 @@ app/src/main/jniLibs/
 build.log
 keystore.properties
 *.jks
+.dev/
