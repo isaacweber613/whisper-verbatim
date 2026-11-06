@@ -47,6 +47,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         private const val COLOR_IDLE = 0xDD1C1C1E.toInt()
         private const val COLOR_RECORDING = 0xDD4F46E5.toInt()
         private const val COLOR_BUSY = 0xDD6B6B6B.toInt()
+        private const val COLOR_RETRY = 0xDDF59E0B.toInt()
         private const val COLOR_FEEDBACK_BG = 0xEE1C1C1E.toInt()
         private const val COLOR_RING = 0xFFE8EAED.toInt()
 
@@ -57,9 +58,12 @@ class WhisperAccessibilityService : AccessibilityService() {
         )
     }
 
-    private enum class State { IDLE, RECORDING, TRANSCRIBING }
+    /** RETRY: a recording failed to transcribe and is kept. Tap sends it again, hold discards it. */
+    private enum class State { IDLE, RECORDING, TRANSCRIBING, RETRY }
 
     private var state = State.IDLE
+    /** The recording that failed to transcribe, kept so a tap can send it again. */
+    private var failedPcm: ByteArray? = null
     private var overlayView: FrameLayout? = null
     private var button: ImageView? = null
     private var bars: LevelBarsView? = null
@@ -124,7 +128,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         val overlay = overlayView ?: return
         val params = layoutParams ?: return
         // Never hide mid-recording or mid-transcription, even if the keyboard closes.
-        val show = state != State.IDLE || keyboardVisible()
+        val show = state == State.RECORDING || state == State.TRANSCRIBING || keyboardVisible()
         val wasShown = overlay.visibility == View.VISIBLE
         if (show == wasShown) return
         overlay.visibility = if (show) View.VISIBLE else View.GONE
@@ -211,15 +215,27 @@ class WhisperAccessibilityService : AccessibilityService() {
 
         var startX = 0; var startY = 0
         var touchX = 0f; var touchY = 0f
+        var discarded = false
+        // Holding the button while a failed recording waits discards it.
+        val holdToDiscard = Runnable {
+            if (state == State.RETRY) { discarded = true; discardFailed() }
+        }
 
         overlay.setOnTouchListener { v, ev ->
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = params.x; startY = params.y
                     touchX = ev.rawX; touchY = ev.rawY
+                    discarded = false
+                    if (state == State.RETRY) {
+                        handler.postDelayed(holdToDiscard, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (abs(ev.rawX - touchX) + abs(ev.rawY - touchY) >= TAP_THRESHOLD_DP * dp) {
+                        handler.removeCallbacks(holdToDiscard)
+                    }
                     params.x = startX + (ev.rawX - touchX).toInt()
                     params.y = startY + (ev.rawY - touchY).toInt()
                     wm.updateViewLayout(v, params)
@@ -230,8 +246,11 @@ class WhisperAccessibilityService : AccessibilityService() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    handler.removeCallbacks(holdToDiscard)
                     val moved = abs(ev.rawX - touchX) + abs(ev.rawY - touchY)
-                    if (moved < TAP_THRESHOLD_DP * dp) {
+                    if (discarded) {
+                        // The hold already discarded the recording; this isn't a tap.
+                    } else if (moved < TAP_THRESHOLD_DP * dp) {
                         onTap()
                     } else {
                         params.x = if (params.x + ringSize / 2 > screenW / 2)
@@ -314,9 +333,29 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     private fun setAppearance(color: Int) {
-        handler.post { button?.background = circle(color) }
+        handler.post {
+            button?.background = circle(color)
+            button?.setImageResource(if (state == State.RETRY) R.drawable.ic_retry else R.drawable.ic_mic)
+            applyKeepScreenOn()
+        }
         // Every state change goes through here; once back to idle, hide again if the keyboard closed.
         scheduleVisibilityUpdate()
+    }
+
+    /** The screen doesn't time out while you dictate or while your words are on their way. */
+    private fun applyKeepScreenOn() {
+        val overlay = overlayView ?: return
+        val params = layoutParams ?: return
+        val on = state == State.RECORDING || state == State.TRANSCRIBING
+        val flag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        val flags = if (on) params.flags or flag else params.flags and flag.inv()
+        if (flags == params.flags) return
+        params.flags = flags
+        try {
+            (getSystemService(WINDOW_SERVICE) as WindowManager).updateViewLayout(overlay, params)
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't update keep-screen-on", e)
+        }
     }
 
     private fun setBusy(visible: Boolean) {
@@ -393,7 +432,35 @@ class WhisperAccessibilityService : AccessibilityService() {
             State.IDLE -> startRecording()
             State.RECORDING -> stopAndTranscribe()
             State.TRANSCRIBING -> toast("Still transcribing. One moment.")
+            State.RETRY -> retry()
         }
+    }
+
+    /** Keeps the recording and turns the button into a retry button. */
+    private fun failWithRetry(pcm: ByteArray, msg: String) {
+        handler.post {
+            failedPcm = pcm
+            state = State.RETRY
+            setBusy(false)
+            setAppearance(COLOR_RETRY)
+            showFeedback("$msg\nTap to try again. Hold to discard.", 6000)
+        }
+    }
+
+    private fun retry() {
+        val pcm = failedPcm ?: run { reset("Nothing to retry."); return }
+        failedPcm = null
+        state = State.TRANSCRIBING
+        setAppearance(COLOR_BUSY)
+        setBusy(true)
+        showFeedback("Trying again...", 1200)
+        transcribeApi(pcm)
+    }
+
+    private fun discardFailed() {
+        if (state != State.RETRY) return
+        failedPcm = null
+        reset("Recording discarded")
     }
 
     private fun startRecording() {
@@ -493,7 +560,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     private fun transcribeApi(pcm: ByteArray) {
         val wav = WavWriter.encode(pcm)
         val apiKey = prefs().getString("api_key", "") ?: ""
-        if (apiKey.isBlank()) { reset("Set your OpenRouter API key in the Word for Word app"); return }
+        if (apiKey.isBlank()) { failWithRetry(pcm, "Set your OpenRouter API key in the Word for Word app"); return }
 
         val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
         val verbatim = prefs().getBoolean("verbatim", true)
@@ -501,12 +568,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             if (result.text != null && result.text.isNotBlank()) {
                 handleTranscriptionResult(result.text)
             } else {
-                handler.post {
-                    toast(result.error ?: "No words came back. Try speaking a little louder.")
-                    state = State.IDLE
-                    setBusy(false)
-                    setAppearance(COLOR_IDLE)
-                }
+                failWithRetry(pcm, result.error ?: "No words came back. Try speaking a little louder.")
             }
         }
     }

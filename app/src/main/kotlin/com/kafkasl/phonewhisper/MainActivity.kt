@@ -27,6 +27,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusSubtitle: TextView
     private lateinit var audioRowSub: TextView
     private lateinit var accRowSub: TextView
+    private lateinit var keepRunningRowSub: TextView
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
     private lateinit var cloudModelRowSub: TextView
@@ -98,6 +99,10 @@ class MainActivity : AppCompatActivity() {
         }
         accRowSub = accRow.findViewWithTag("subtitle")
         root.addView(accRow)
+
+        val keepRunningRow = settingsRow("Keep running", "") { showKeepRunning() }
+        keepRunningRowSub = keepRunningRow.findViewWithTag("subtitle")
+        root.addView(keepRunningRow)
 
         // --- Engine Section ---
         
@@ -319,6 +324,23 @@ class MainActivity : AppCompatActivity() {
         setupDialog = b.setNegativeButton("Later") { _, _ -> setupSnoozed = true }.show()
     }
 
+    /**
+     * The phone maker's battery and auto-start settings, so Android doesn't stop the service
+     * (see [BackgroundSettings]). Each step opens its settings screen.
+     */
+    private fun showKeepRunning() {
+        val steps = BackgroundSettings.steps(BackgroundSettings.vendor(), packageName)
+        val items = steps.mapIndexed { i, step ->
+            val done = step.status(this) == BackgroundSettings.Status.DONE
+            "${i + 1}. ${step.title}\n" + (if (done) "✓ Done" else step.howTo)
+        }.toTypedArray()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Keep running")
+            .setItems(items) { _, which -> BackgroundSettings.open(this, steps[which]) }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun setAccPhase(phase: Int) = prefs().edit().putInt("acc_setup_phase", phase).apply()
 
     /**
@@ -519,6 +541,10 @@ class MainActivity : AppCompatActivity() {
 
         audioRowSub.text = if (audio) "Granted" else "Tap to grant permission"
         accRowSub.text = if (acc) "Enabled" else "Tap to enable in settings"
+        val keepSteps = BackgroundSettings.steps(BackgroundSettings.vendor(), packageName)
+        keepRunningRowSub.text =
+            if (keepSteps.all { it.status(this) == BackgroundSettings.Status.DONE }) "Done"
+            else "Battery settings so Android doesn't turn off the mic button"
 
         modelContainer.visibility = if (useLocal) View.VISIBLE else View.GONE
         cloudModelRow.visibility = if (useLocal) View.GONE else View.VISIBLE
