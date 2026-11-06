@@ -13,7 +13,11 @@ import java.util.concurrent.TimeUnit
  * transcript exactly as the model wrote it. No cleanup or rewording happens here.
  */
 object TranscriberClient {
-    data class Result(val text: String?, val error: String?)
+    /**
+     * [code] and [detail] are OpenRouter's HTTP status and own error text for a failed answer;
+     * null for success or no connection.
+     */
+    data class Result(val text: String?, val error: String?, val code: Int? = null, val detail: String? = null)
     data class CloudModel(
         val id: String,
         val name: String,
@@ -63,6 +67,18 @@ object TranscriberClient {
     fun languageCode(model: String, language: String): String? = LANGUAGE_CODES[model]?.get(language)
 
     /** Shown in the app for a model ID: the friendly name for a built-in model, the raw ID for a custom one. */
+    /**
+     * Errors where another model may still work: the model is missing (OpenRouter answers 400
+     * "Model ... does not exist"), busy, timed out, or its company's servers failed. Not key,
+     * credit, or recording-size errors, which hit every model.
+     */
+    fun shouldTryAnotherModel(code: Int?, detail: String? = null) =
+        code == 404 || code == 408 || code == 429 || (code != null && code in 500..599) ||
+        (code == 400 && detail?.contains("does not exist", ignoreCase = true) == true)
+
+    /** The model to try when [failed] doesn't answer: the first built-in model that isn't [failed]. */
+    fun fallbackFor(failed: String) = CLOUD_MODELS.first { it.id != failed }.id
+
     fun titleFor(id: String) = CLOUD_MODELS.firstOrNull { it.id == id }?.title ?: id
 
     fun summaryFor(id: String) = CLOUD_MODELS.firstOrNull { it.id == id }
@@ -127,7 +143,8 @@ object TranscriberClient {
                 if (response.isSuccessful) {
                     callback(parseResponse(body))
                 } else {
-                    callback(Result(null, httpError(response.code, parseResponse(body).error, model)))
+                    val detail = parseResponse(body).error
+                    callback(Result(null, httpError(response.code, detail, model), response.code, detail))
                 }
             }
         })

@@ -567,14 +567,28 @@ class WhisperAccessibilityService : AccessibilityService() {
         val language = prefs().getString("language", "auto") ?: "auto"
         TranscriberClient.transcribe(wav, apiKey, model, verbatim, language) { result ->
             if (result.text != null && result.text.isNotBlank()) {
-                handleTranscriptionResult(result.text)
+                handleTranscriptionResult(result.text, model)
+            } else if (TranscriberClient.shouldTryAnotherModel(result.code, result.detail)) {
+                // The chosen model is busy or down: send the same recording to another model right away.
+                val backup = TranscriberClient.fallbackFor(model)
+                Log.i(TAG, "$model failed (${result.code}), trying $backup")
+                TranscriberClient.transcribe(wav, apiKey, backup, verbatim, language) { second ->
+                    Log.i(TAG, "$backup answered: ${if (!second.text.isNullOrBlank()) "text" else second.code?.let { "error $it" } ?: "no text"}")
+                    if (second.text != null && second.text.isNotBlank()) {
+                        showFeedback("${TranscriberClient.titleFor(model)} was unavailable. Used ${TranscriberClient.titleFor(backup)}.", 4000)
+                        handleTranscriptionResult(second.text, backup)
+                    } else {
+                        failWithRetry(pcm, result.error ?: "No words came back. Try speaking a little louder.")
+                    }
+                }
             } else {
                 failWithRetry(pcm, result.error ?: "No words came back. Try speaking a little louder.")
             }
         }
     }
 
-    private fun handleTranscriptionResult(text: String?) {
+    /** [usedModel] is the model that wrote [text], saved with it in history. */
+    private fun handleTranscriptionResult(text: String?, usedModel: String? = null) {
         if (text.isNullOrBlank()) {
             handler.post {
                 toast("No speech detected")
@@ -587,7 +601,7 @@ class WhisperAccessibilityService : AccessibilityService() {
 
         // Save your exact words to history (kept 24 hours, or forever if that's turned on).
         try {
-            val model = if (prefs().getBoolean("use_local", false)) "local"
+            val model = usedModel ?: if (prefs().getBoolean("use_local", false)) "local"
                         else prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: ""
             HistoryStore.add(this, text, model)
         } catch (e: Exception) {

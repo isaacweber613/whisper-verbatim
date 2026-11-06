@@ -37,4 +37,18 @@ class TranscriberClientTest {
         assertNull(TranscriberClient.languageCode("elevenlabs/scribe-v2", "auto"))
         assertTrue(TranscriberClient.languagesFor("mistralai/voxtral-mini-transcribe-3-0").isEmpty())
     }
+
+    @Test fun `tries another model only when that could help`() {
+        for (code in listOf(404, 408, 429, 500, 503)) assertTrue(TranscriberClient.shouldTryAnotherModel(code))
+        for (code in listOf(null, 400, 401, 402, 403, 413)) assertTrue(!TranscriberClient.shouldTryAnotherModel(code))
+        // OpenRouter's answer for a model it doesn't have.
+        assertTrue(TranscriberClient.shouldTryAnotherModel(400, "Model nope/nope does not exist"))
+        assertTrue(!TranscriberClient.shouldTryAnotherModel(400, "Invalid audio format"))
+    }
+
+    @Test fun `falls back to GPT Transcribe from MAI, and to MAI from anything else`() {
+        assertEquals("openai/gpt-transcribe", TranscriberClient.fallbackFor("microsoft/mai-transcribe-2"))
+        assertEquals("microsoft/mai-transcribe-2", TranscriberClient.fallbackFor("openai/gpt-transcribe"))
+        assertEquals("microsoft/mai-transcribe-2", TranscriberClient.fallbackFor("deepgram/nova-3"))
+    }
 }
