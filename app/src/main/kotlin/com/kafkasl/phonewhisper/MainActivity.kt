@@ -33,7 +33,10 @@ class MainActivity : AppCompatActivity() {
     private var update: Updater.Release? = null
     private lateinit var updateAction: UpdateAction
     private var updateChecking = false
-    private lateinit var updateNotifySwitch: MaterialSwitch
+    private lateinit var setupHeader: TextView
+    private lateinit var audioRow: LinearLayout
+    private lateinit var accRow: LinearLayout
+    private lateinit var keepRunningRow: LinearLayout
     private lateinit var vibrateSwitch: MaterialSwitch
     private lateinit var analyticsSwitch: MaterialSwitch
 
@@ -46,7 +49,6 @@ class MainActivity : AppCompatActivity() {
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importSettings(uri)
     }
-    private lateinit var updateNotifyRowSub: TextView
     private lateinit var keyRowSub: TextView
     private lateinit var cloudModelRow: LinearLayout
     private lateinit var cloudModelRowSub: TextView
@@ -119,9 +121,11 @@ class MainActivity : AppCompatActivity() {
         root.addView(updateRow)
 
         // --- Setup Section ---
-        root.addView(sectionHeader("Setup"))
-        
-        val audioRow = settingsRow("Audio permission", "Checking...") {
+        // Each setup row shows only until it's done, and the heading only while any shows.
+        setupHeader = sectionHeader("Setup")
+        root.addView(setupHeader)
+
+        audioRow = settingsRow("Audio permission", "Checking...") {
             if (!hasPerm(Manifest.permission.RECORD_AUDIO)) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
             }
@@ -129,7 +133,7 @@ class MainActivity : AppCompatActivity() {
         audioRowSub = audioRow.findViewWithTag("subtitle")
         root.addView(audioRow)
 
-        val accRow = settingsRow("Accessibility service", "Checking...") {
+        accRow = settingsRow("Accessibility service", "Checking...") {
             setupSnoozed = false
             if (WhisperAccessibilityService.instance == null) showAccessibilityStep()
             else openAccessibilitySettings()
@@ -137,7 +141,7 @@ class MainActivity : AppCompatActivity() {
         accRowSub = accRow.findViewWithTag("subtitle")
         root.addView(accRow)
 
-        val keepRunningRow = settingsRow("Keep running", "") { showKeepRunning() }
+        keepRunningRow = settingsRow("Keep running", "") { showKeepRunning() }
         keepRunningRowSub = keepRunningRow.findViewWithTag("subtitle")
         root.addView(keepRunningRow)
 
@@ -220,21 +224,6 @@ class MainActivity : AppCompatActivity() {
             prefs().edit().putBoolean("vibrate", !prefs().getBoolean("vibrate", true)).apply()
             refresh()
         })
-
-        updateNotifySwitch = MaterialSwitch(this).apply { isClickable = false }
-        val updateNotifyRow = settingsRow("Update notifications", "", updateNotifySwitch) {
-            val on = !UpdateNotifier.enabled(this)
-            UpdateNotifier.setEnabled(this, on)
-            // Android 13+ asks once whether the app may show notifications.
-            if (on && android.os.Build.VERSION.SDK_INT >= 33 &&
-                !hasPerm(Manifest.permission.POST_NOTIFICATIONS)) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
-            }
-            refresh()
-        }
-        updateNotifyRowSub = updateNotifyRow.findViewWithTag("subtitle")
-        // The Play build gets its updates from Play, so it has no update check to turn on.
-        if (BuildConfig.UPDATES) root.addView(updateNotifyRow)
 
         analyticsSwitch = MaterialSwitch(this).apply { isClickable = false }
         root.addView(settingsRow("Share usage data",
@@ -527,7 +516,6 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Import") { _, _ ->
                 SettingsBackup.apply(prefs(), values)
                 WhisperAccessibilityService.instance?.applyShortcutSettings()
-                UpdateNotifier.schedule(this)
                 refresh()
                 Toast.makeText(this, "Settings imported", Toast.LENGTH_SHORT).show()
             }
@@ -737,17 +725,21 @@ class MainActivity : AppCompatActivity() {
         audioRowSub.text = if (audio) "Granted" else "Tap to grant permission"
         accRowSub.text = if (acc) "Enabled" else "Tap to enable in settings"
         val keepSteps = BackgroundSettings.steps(BackgroundSettings.vendor(), packageName)
-        keepRunningRowSub.text =
-            if (keepSteps.all { it.status(this) == BackgroundSettings.Status.DONE }) "Done"
-            else "Battery settings so Android doesn't turn off the mic button"
+        val keepDone = keepSteps.all { it.status(this) == BackgroundSettings.Status.DONE }
+        keepRunningRowSub.text = if (keepDone) "Done" else "Battery settings so Android doesn't turn off the mic button"
+        audioRow.visibility = if (audio) View.GONE else View.VISIBLE
+        accRow.visibility = if (acc) View.GONE else View.VISIBLE
+        keepRunningRow.visibility = if (keepDone) View.GONE else View.VISIBLE
+        setupHeader.visibility = if (audio && acc && keepDone) View.GONE else View.VISIBLE
 
         modelContainer.visibility = if (useLocal) View.VISIBLE else View.GONE
-        cloudModelRow.visibility = if (useLocal) View.GONE else View.VISIBLE
+        // With free minutes, Word for Word picks the model, so there's nothing to choose.
+        cloudModelRow.visibility = if (useLocal || FreeMinutes.inUse(this)) View.GONE else View.VISIBLE
         verbatimRow.visibility = if (useLocal) View.GONE else View.VISIBLE
         val historyCount = HistoryStore.all(this).size
         val keepForever = prefs().getBoolean("keep_history_forever", false)
         historyRowSub.text = "$historyCount saved · " + (if (keepForever) "kept forever" else "kept 24 hours") + ". Tap to view and copy"
-        val cloudModel = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
+        val cloudModel = currentModel()
         cloudModelRowSub.text = TranscriberClient.summaryFor(cloudModel)
         // Only models that accept a language show the row.
         val modelLanguages = TranscriberClient.languagesFor(cloudModel)
@@ -792,14 +784,6 @@ class MainActivity : AppCompatActivity() {
         
         vibrateSwitch.isChecked = prefs().getBoolean("vibrate", true)
         analyticsSwitch.isChecked = Analytics.enabled(this)
-        val notifyOn = UpdateNotifier.enabled(this)
-        updateNotifySwitch.isChecked = notifyOn
-        updateNotifyRowSub.text = when {
-            !notifyOn -> "Off"
-            android.os.Build.VERSION.SDK_INT >= 33 && !hasPerm(Manifest.permission.POST_NOTIFICATIONS) ->
-                "On, but notifications are blocked. Allow them for Word for Word in Android settings"
-            else -> "On: a notification when a new version is out"
-        }
 
         shortcutSwitch.isChecked = shortcutOn
         shortcutRowSub.text = if (shortcutOn) "On. The mic button shows only while you talk" else "Off"
@@ -1079,7 +1063,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Language picker: Auto plus the languages the chosen model accepts. */
     private fun pickLanguage() {
-        val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
+        val model = currentModel()
         val keys = listOf("auto") + TranscriberClient.languagesFor(model)
         val names = keys.map { if (it == "auto") "Auto" else TranscriberClient.LANGUAGES[it] }.toTypedArray()
         val current = keys.indexOf(prefs().getString("language", "auto")).coerceAtLeast(0)
@@ -1092,6 +1076,11 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
+
+    /** The model recordings go to: the picked one, or the default with free minutes. */
+    private fun currentModel(): String =
+        if (FreeMinutes.inUse(this)) TranscriberClient.DEFAULT_MODEL
+        else prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
 
     /** Custom model IDs the user added, in the order they were added. */
     private fun savedCustomModels(): List<String> =

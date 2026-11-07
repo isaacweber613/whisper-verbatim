@@ -105,10 +105,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         handler.post { onStateChanged?.invoke() }
         showOverlay()
         applyShortcutSettings()
-        // The daily update check's alarm is cleared when the phone restarts; this service starts with the phone.
-        UpdateNotifier.schedule(this)
-        // Debug builds only: lets tests type text as if it were dictated, since emulators have no voice,
-        // and run the daily update check now.
+        // Debug builds only: lets tests type text as if it were dictated, since emulators have no voice.
         //   adb shell am broadcast -a com.isaacweber.wordforword.DEBUG_DICTATE --es text "hello"
         if (BuildConfig.DEBUG) {
             androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
@@ -116,13 +113,6 @@ class WhisperAccessibilityService : AccessibilityService() {
                     handleTranscriptionResult(i.getStringExtra("text"), "debug")
                 }
             }, android.content.IntentFilter("com.isaacweber.wordforword.DEBUG_DICTATE"),
-                androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
-            // adb shell am broadcast -a com.isaacweber.wordforword.DEBUG_UPDATE_CHECK
-            androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
-                override fun onReceive(c: Context, i: android.content.Intent) {
-                    thread { UpdateNotifier.checkAndNotify(applicationContext) }
-                }
-            }, android.content.IntentFilter("com.isaacweber.wordforword.DEBUG_UPDATE_CHECK"),
                 androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
         }
         // Try to load local model in background
@@ -656,7 +646,9 @@ class WhisperAccessibilityService : AccessibilityService() {
         val deviceId = if (FreeMinutes.inUse(this)) FreeMinutes.deviceId(this) else null
         if (apiKey.isBlank() && deviceId == null) { failWithRetry(pcm, "Set your OpenRouter API key in the Word for Word app"); return }
 
-        val model = prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
+        // With free minutes, Word for Word picks the model; the picker is hidden.
+        val model = if (deviceId != null) TranscriberClient.DEFAULT_MODEL
+                    else prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
         val verbatim = prefs().getBoolean("verbatim", false)
         val language = prefs().getString("language", "auto") ?: "auto"
         // Audio length to a tenth of a second (16 kHz, 16-bit mono = 32,000 bytes a second), for usage stats.

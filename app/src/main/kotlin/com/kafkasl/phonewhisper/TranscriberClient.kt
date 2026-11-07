@@ -46,25 +46,62 @@ object TranscriberClient {
             "Verbatim by default. Writes times with :00, so \"six\" becomes \"6:00.\"")
     )
 
-    /** Spoken-language choices besides "auto", where the model guesses. */
-    val LANGUAGES = linkedMapOf("he" to "Hebrew", "yi" to "Yiddish")
-
-    /**
-     * The language code each model is sent for each choice; a missing entry means the
-     * model guesses. Tested with real Yiddish through OpenRouter on 2026-11-05:
-     * GPT Transcribe rejects every Yiddish code ("yi", "yid") with error 400, and with
-     * Hebrew set it wrote Yiddish better than guessing, so Yiddish sends "he" to it.
-     * MAI-Transcribe 2 lists Hebrew but not Yiddish; Voxtral lists neither.
-     */
-    private val LANGUAGE_CODES = mapOf(
-        "elevenlabs/scribe-v2" to mapOf("he" to "he", "yi" to "yi"),
-        "openai/gpt-transcribe" to mapOf("he" to "he", "yi" to "he"),
-        "microsoft/mai-transcribe-2" to mapOf("he" to "he"),
+    /** Spoken-language choices besides "auto", where the model guesses, by ISO-639-1 code. */
+    val LANGUAGES = linkedMapOf(
+        "af" to "Afrikaans", "ar" to "Arabic", "hy" to "Armenian", "az" to "Azerbaijani",
+        "be" to "Belarusian", "bn" to "Bengali", "bs" to "Bosnian", "bg" to "Bulgarian",
+        "ca" to "Catalan", "zh" to "Chinese", "hr" to "Croatian", "cs" to "Czech",
+        "da" to "Danish", "nl" to "Dutch", "en" to "English", "et" to "Estonian",
+        "tl" to "Filipino", "fi" to "Finnish", "fr" to "French", "gl" to "Galician",
+        "de" to "German", "el" to "Greek", "gu" to "Gujarati", "he" to "Hebrew",
+        "hi" to "Hindi", "hu" to "Hungarian", "is" to "Icelandic", "id" to "Indonesian",
+        "it" to "Italian", "ja" to "Japanese", "kn" to "Kannada", "kk" to "Kazakh",
+        "ko" to "Korean", "lv" to "Latvian", "lt" to "Lithuanian", "mk" to "Macedonian",
+        "ms" to "Malay", "ml" to "Malayalam", "mr" to "Marathi", "ne" to "Nepali",
+        "no" to "Norwegian", "fa" to "Persian", "pl" to "Polish", "pt" to "Portuguese",
+        "pa" to "Punjabi", "ro" to "Romanian", "ru" to "Russian", "sr" to "Serbian",
+        "sk" to "Slovak", "sl" to "Slovenian", "es" to "Spanish", "sw" to "Swahili",
+        "sv" to "Swedish", "ta" to "Tamil", "te" to "Telugu", "th" to "Thai",
+        "tr" to "Turkish", "uk" to "Ukrainian", "ur" to "Urdu", "vi" to "Vietnamese",
+        "cy" to "Welsh", "yi" to "Yiddish",
     )
 
-    fun languagesFor(model: String): List<String> = LANGUAGE_CODES[model]?.keys?.toList() ?: emptyList()
+    /*
+     * Which picker languages each model accepts, from each company's published list
+     * (checked 2026-11-06). MAI-Transcribe 2: Microsoft's table of 60 (Norwegian is "nb",
+     * Filipino "fil"). Voxtral: the 45 named in Mistral's launch post (Mistral says 50 but
+     * doesn't list them all). Scribe v2: ElevenLabs' list; it also took "yi" in testing.
+     * GPT Transcribe: OpenAI publishes no list; tested 2026-11-05, it rejects Yiddish with
+     * error 400 and writes Yiddish best with Hebrew set, so Yiddish sends "he".
+     * If a model still refuses a language, the request is sent again without one (see transcribe).
+     */
+    private val MAI = setOf("af", "ar", "az", "bg", "bn", "bs", "ca", "cs", "da", "de", "el", "en", "es",
+        "et", "fa", "fi", "tl", "fr", "gl", "gu", "he", "hi", "hu", "hy", "id", "is", "it", "ja", "kk", "kn",
+        "ko", "lt", "lv", "mk", "ml", "mr", "ms", "no", "ne", "nl", "pa", "pl", "pt", "ro", "ru", "sk", "sl",
+        "sv", "sw", "ta", "te", "th", "tr", "uk", "ur", "vi", "zh")
+    private val VOXTRAL = setOf("ar", "bn", "bg", "ca", "zh", "cs", "da", "nl", "en", "et", "fi", "fr", "de",
+        "el", "gu", "hi", "hu", "is", "id", "it", "ja", "kn", "ko", "lv", "lt", "mk", "ms", "ml", "mr", "no",
+        "fa", "pl", "pt", "ro", "ru", "sk", "sl", "es", "sv", "tl", "te", "th", "tr", "uk", "vi")
 
-    fun languageCode(model: String, language: String): String? = LANGUAGE_CODES[model]?.get(language)
+    fun languagesFor(model: String): List<String> = LANGUAGES.keys.filter { languageCode(model, it) != null }
+
+    /** The code sent to [model] for the picked [language], or null to let the model guess. */
+    fun languageCode(model: String, language: String): String? {
+        if (language !in LANGUAGES) return null
+        return when (model) {
+            "microsoft/mai-transcribe-2" -> when (language) {
+                !in MAI -> null
+                "no" -> "nb"
+                "tl" -> "fil"
+                else -> language
+            }
+            "mistralai/voxtral-mini-transcribe-3-0" -> language.takeIf { it in VOXTRAL }
+            // Every picker language is on ElevenLabs' list.
+            "elevenlabs/scribe-v2" -> if (language == "tl") "fil" else language
+            "openai/gpt-transcribe" -> if (language == "yi") "he" else language
+            else -> null
+        }
+    }
 
     /** Shown in the app for a model ID: the friendly name for a built-in model, the raw ID for a custom one. */
     /**
@@ -147,12 +184,17 @@ object TranscriberClient {
             .post(buildBody(wavData, model, verbatim, language).toRequestBody("application/json".toMediaType()))
             .build()
 
+        val languageSent = languageCode(model, language) != null
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) =
                 callback(Result(null, if (viaServer) serverNetworkError(e) else networkError(e)))
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
-                if (response.isSuccessful) {
+                if (languageSent && (response.code == 400 || response.code == 422) &&
+                    !body.contains("does not exist")) {
+                    // The model refused the language: send again and let it guess.
+                    transcribe(wavData, apiKey, model, verbatim, "auto", deviceId, callback)
+                } else if (response.isSuccessful) {
                     callback(parseResponse(body))
                 } else {
                     val detail = parseResponse(body).error

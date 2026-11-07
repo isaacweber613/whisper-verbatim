@@ -44,7 +44,7 @@ key presses alone doesn't trigger it.
 ## Google Play build
 
 A third flavor, `play`, is for the Play Store only and isn't released on GitHub (Isaac,
-2026-11-06). It has no update check, no Update row and no update notifications
+2026-11-06). It has no update check and no Update row
 (`BuildConfig.UPDATES` is false), because Play policy bans apps that update themselves outside
 Play. Build it with `./scripts/play-bundle.sh`, which writes `WordForWordPlay.aab`, signed with
 the private upload key. The key is `~/.android/wordforword-upload.jks`; its password is in

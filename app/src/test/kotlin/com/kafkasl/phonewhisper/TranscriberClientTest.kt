@@ -35,7 +35,12 @@ class TranscriberClientTest {
         assertEquals("he", TranscriberClient.languageCode("microsoft/mai-transcribe-2", "he"))
         assertNull(TranscriberClient.languageCode("microsoft/mai-transcribe-2", "yi"))
         assertNull(TranscriberClient.languageCode("elevenlabs/scribe-v2", "auto"))
-        assertTrue(TranscriberClient.languagesFor("mistralai/voxtral-mini-transcribe-3-0").isEmpty())
+        assertNull(TranscriberClient.languageCode("mistralai/voxtral-mini-transcribe-3-0", "he"))
+        assertEquals("fr", TranscriberClient.languageCode("mistralai/voxtral-mini-transcribe-3-0", "fr"))
+        assertEquals("nb", TranscriberClient.languageCode("microsoft/mai-transcribe-2", "no"))
+        assertEquals("fil", TranscriberClient.languageCode("elevenlabs/scribe-v2", "tl"))
+        assertNull(TranscriberClient.languageCode("someone/custom-model", "fr"))
+        assertTrue(TranscriberClient.languagesFor("openai/gpt-transcribe").size > 50)
     }
 
     @Test fun `tries another model only when that could help`() {

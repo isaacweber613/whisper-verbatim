@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-    <!-- The Play build has no update notifications, so it doesn't ask to show notifications. -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" tools:node="remove" />
-    <application>
-        <receiver android:name=".UpdateCheckReceiver" tools:node="remove" />
-    </application>
-</manifest>
