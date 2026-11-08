@@ -2,195 +2,92 @@
   <img src="docs/word-for-word-icon.svg" width="128" height="128" alt="Word for Word logo">
 </p>
 
-# Word for Word (a fork of Phone Whisper)
+# Word for Word
 
-Word for Word (formerly Whisper Verbatim) is a fork of [kafkasl/phone-whisper](https://github.com/kafkasl/phone-whisper) for people who want
-**verbatim** dictation: your exact words, including "um," "uh," repeats, and mistakes, with no AI rewording.
+Push-to-talk dictation for Android that types **your exact words** into any text box, with no AI rewording.
+Keep your normal keyboard: tap the floating mic button (or press a keyboard shortcut), speak, tap again,
+and the text appears at the cursor.
 
-### Changes in this fork
-
-- **Cloud transcription through [OpenRouter](https://openrouter.ai)** instead of OpenAI, using your own OpenRouter API key.
-  Built-in choices: MAI-Transcribe 2 (Microsoft, the default), Voxtral Mini Transcribe 3 (Mistral), and Scribe v2 (ElevenLabs).
-  You can also paste the ID of any speech-to-text model on OpenRouter.
-- **Verbatim mode** (off by default) asks the model to keep fillers, repeats, and false starts.
-- **Types text directly into the box** at the cursor instead of going through the clipboard.
-- **The floating button shows only while the keyboard is open.**
-- **Setup walkthrough** for the microphone, the accessibility service (including Android's "restricted settings" step
-  for apps installed outside the Play Store), and the API key.
-- **Transcription history**: kept for 24 hours by default, or forever if you turn that on. Tap an entry to copy it.
-- **Errors show on screen** next to the floating button (no key, wrong key, no internet, out of credit,
-  microphone busy, nothing heard), and the app checks your key with OpenRouter when you save it.
-- **Cloud-only**: the local (on-phone) models, the cloud on/off switch, and the AI "cleanup" option are removed,
-  since this fork never rewrites your words.
-- **Voice-level bars**: while recording, the floating button shows bars that move with your voice.
-- **Skips placeholder text**: grey hint text like WhatsApp's "Message" is never typed in front of your words.
-- The app is named Word for Word (package `com.isaacweber.wordforword`), so it installs alongside the original.
-  Versions before 0.5.0 were called Whisper Verbatim and used a different package, so 0.5.0 installs as a separate app.
-  Uninstall Whisper Verbatim after you set up Word for Word.
-- [Privacy policy](PRIVACY.md)
-
-### Install
-
-Download `WordForWord.apk` from the [latest release](https://github.com/isaacweber613/whisper-verbatim/releases/latest)
-and open it on your phone. The app walks you through the microphone, accessibility, and OpenRouter key setup.
-
-The original project's README follows.
-
----
-
-# Phone Whisper
-
-Push-to-talk dictation for Android.
-
-Phone Whisper lets you speak into most apps without switching keyboards. Tap the floating button, speak, tap again, and your text is inserted into the currently focused text field when the app exposes a standard Android input field.\
-
-It supports:
-
-- **Local on-device transcription** with sherpa-onnx
-- **Cloud transcription** with OpenAI Whisper
-- **Optional cleanup** with OpenAI to fix punctuation and grammar
-
-If you try it and it genuinely saves you time, consider [sponsoring](https://github.com/sponsors/kafkasl)
-
-
-## Why I built this
-
-- I like SwiftKey and want to keep it as keyboard but...
-- Most keyboard dictation felt too inaccurate
-- Gemini's voice input auto submits your transcription (which is pretty bad) so you can't edit it before sending
-- Post processing yields much better results, specially adding a list of keywords and technical terms you often use
-- Inserting text into the field you're already using lets you keep editing it like any other draft.
+Word for Word started as a fork of [kafkasl/phone-whisper](https://github.com/kafkasl/phone-whisper).
 
 ## Install
 
-### Easiest: download the APK
+Download one of these from the [latest release](https://github.com/isaacweber613/whisper-verbatim/releases/latest)
+and open it on your phone:
 
-Grab the latest APK from [GitHub Releases](https://github.com/kafkasl/phone-whisper/releases).
+- **`WordForWord.apk`** (recommended). When an update is out, the app shows an Update row that downloads
+  the new APK in your browser.
+- **`WordForWordSelfUpdate.apk`** downloads and installs its own updates. Google Play Protect flags it as
+  harmful because it can install apps; tap "Install anyway" if you want it.
 
-Open it on your phone, install it, then launch the app once to finish setup.
+Both run on Android 6 and newer. The app walks you through the microphone, the accessibility service
+(including Android's "restricted settings" step for apps installed outside the Play Store), and your
+[OpenRouter](https://openrouter.ai) API key.
 
-### Build from source
+## What it does
 
-Requires JDK 17 and Android SDK.
+- **Cloud transcription through OpenRouter** with your own API key. Built-in models: MAI-Transcribe 2
+  (Microsoft, the default), GPT Transcribe (OpenAI), Voxtral Mini Transcribe 3 (Mistral), and Scribe v2
+  (ElevenLabs). You can also paste the ID of any speech-to-text model on OpenRouter.
+- **About 60 languages**, or Auto to let the model detect it.
+- **Verbatim mode** (off by default) asks the model to keep "um", "uh", repeats, and false starts.
+- **Types straight into the box** at the cursor. If an app doesn't allow that, the text is copied to the
+  clipboard and saved in history.
+- **The mic button shows only while the keyboard is open**, with bars that move with your voice and a short
+  buzz on start and stop (the buzz can be turned off).
+- **Keyboard shortcut** for phones with a physical keypad: set any key or key combination and how long to
+  press it.
+- **History**: transcriptions are kept for 24 hours, or forever if you turn that on. Tap one to copy it.
+- **Clear errors on screen** next to the mic button (no key, wrong key, no internet, out of credit,
+  microphone busy, nothing heard). The app checks your key with OpenRouter when you save it.
+- **Export and import settings**, including the API key, as a file.
+- **Anonymous usage counts** through PostHog, which you can turn off with "Share usage data" in Settings.
+- **Yiddish**: with Yiddish picked, holding the mic button (or a second shortcut) sends that recording to a
+  Yiddish speech model on the developer's PC. If the PC is off, it falls back to the normal model.
 
-```bash
-git clone https://github.com/kafkasl/phone-whisper.git && cd phone-whisper
-make build
-```
+Word for Word installs as `com.isaacweber.wordforword`, separately from Phone Whisper. Versions before 0.5.0
+were called Whisper Verbatim and used a different package; uninstall that once Word for Word is set up.
 
-APK output:
+## Why it needs Accessibility
 
-```bash
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-If you use ADB:
-
-```bash
-make adb-install
-```
-
-## How it works
-
-1. A small overlay button floats on screen
-2. Tap once to start recording
-3. Tap again to stop
-4. Audio is transcribed locally or in the cloud
-5. The text is inserted into the focused text field
-6. If insertion fails, the text is copied to the clipboard
-
-## Setup
-
-### First-time setup
-
-1. Open **Phone Whisper**
-2. Grant the **audio recording** permission
-3. Enable the **Accessibility Service**
-4. Choose your transcription mode:
-   - **Local**: download a model in the app
-   - **Cloud**: paste your OpenAI API key
-
-Once setup is done, the floating button is ready.
-
-## Why does it need Accessibility?
-
-Phone Whisper uses Android Accessibility Service for one narrow reason: to insert dictated text into the currently focused text field across apps.
-
-It does **not** replace your keyboard. It does **not** run background automation. It only acts after you explicitly tap the overlay button.
+The accessibility service is used to type the dictated text into the box you're in, and to watch for your
+keyboard shortcut if you set one. It does not replace your keyboard and does nothing until you start a
+recording.
 
 ## Privacy
 
-Phone Whisper supports two modes:
+Audio goes from your phone to OpenRouter, which passes it to the model you picked. There is no Word for Word
+server in the GitHub builds. Full policy: [PRIVACY.md](PRIVACY.md).
 
-- **Local mode**: audio stays on-device
-- **Cloud mode**: audio is sent directly from your device to OpenAI's transcription API
-- **Optional cleanup**: transcript text is sent directly from your device to OpenAI's chat API
+## Tips
 
-I don't run a backend for this app. In cloud mode, requests go straight from your phone to OpenAI using your own API key.
+- **Termux**: the terminal area isn't a normal text box. Swipe the extra keys row to switch to Termux's text
+  input box and dictate there.
 
-Full policy: [PRIVACY.md](PRIVACY.md)
+## Building
 
-## Local models
-
-Models are stored in app storage under:
+Needs JDK 17 and the Android SDK.
 
 ```bash
-/data/data/com.kafkasl.phonewhisper/files/models/
+./gradlew assembleBrowserDebug        # debug build of WordForWord.apk
+./gradlew testBrowserDebugUnitTest    # unit tests
 ```
 
-Current catalog:
+There are three build variants, which differ only in how updates work:
 
-| Model | Size | Notes |
-|---|---:|---|
-| Parakeet 110M | 100 MB | Best default |
-| Whisper Base | 199 MB | Solid baseline |
-| Parakeet 0.6B | 465 MB | Best quality |
-| Moonshine Tiny | 103 MB | Fastest |
+| Variant | File | Updates |
+|---|---|---|
+| `browser` | `WordForWord.apk` | Opens the new APK in the browser |
+| `selfInstall` | `WordForWordSelfUpdate.apk` | Downloads and installs itself |
+| `play` | `WordForWordPlay.aab` | Through Google Play only; not released on GitHub |
 
-The app downloads and extracts models directly from the sherpa-onnx release archives.
-
-## Development
-
-```bash
-make build       # build debug APK
-make test        # run unit tests
-make adb-install # build + install via ADB
-make clean       # clean build artifacts
-```
-
-## App compatibility
-
-Phone Whisper works best in apps that use standard Android text fields.
-Some apps use custom text surfaces or terminal-style views, which may not support direct accessibility paste.
-When insertion is not possible, Phone Whisper falls back to copying the transcript to the clipboard.
-
-### Termux
-
-Termux's main terminal area is not a standard Android text field, so direct insertion may not work there.
-
-To use Phone Whisper in Termux:
-
-1. Focus Termux
-2. Swipe the extra keys row (`ESC`, `CTRL`, `ALT`, arrows, etc.) left or right
-3. Switch to Termux's native text input box
-4. Dictate there
-
-Once text is inserted into the native input box, Termux sends it to the terminal normally.
-
-## Current limitations
-
-- Accessibility permission is required for cross-app insertion
-- Some apps may block paste or text injection
-- Some apps use custom input surfaces instead of standard Android text fields
-- Local models are large
-- Cloud mode requires your own OpenAI API key
-
-## Support the project
-
-If Phone Whisper saves you time, you can sponsor the project on GitHub:
-
-- https://github.com/sponsors/kafkasl
+- `scripts/release.sh <notes-file>` runs the tests, builds and signs the two GitHub APKs, and creates the
+  GitHub release. Bump `versionCode` and `versionName` in `app/build.gradle.kts` first.
+- `scripts/play-bundle.sh` builds the signed Play bundle. It needs the upload key and `keystore.properties`,
+  which are not in the repo.
+- `server/` is a Cloudflare Worker that gives the Play build 30 free minutes a month per phone. Deploy with
+  `cd server && npm test && npx wrangler deploy`.
 
 ## License
 
-Personal project. Do whatever you want with it.
+Apache License 2.0. See [LICENSE](LICENSE).
