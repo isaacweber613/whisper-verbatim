@@ -73,3 +73,13 @@ they can't trigger the shortcut. Send real hardware key events with `sendevent` 
 emulator's keyboard device (`getevent -p` lists it; needs an AVD with `hw.keyboard=yes`).
 Also, a UI-automation snapshot tool (such as agent-device `snapshot`) pauses accessibility
 services while connected; close its session before testing.
+
+## Yiddish takes (Isaac, 2026-11-08)
+
+With Yiddish picked as the language, one recording at a time can go to the Yiddish model running
+on Isaac's PC (ivrit.ai yi-whisper-large-v3, served by the `yiddishtry` Cloudflare Worker from the
+yiddish-stt repo's `tryout/`): hold the idle mic button (Android's long-press time), or press the
+second "Yiddish shortcut keys" shortcut, which shows only with the shortcut on and Yiddish picked.
+A quick tap or the normal shortcut sends the take to the normal cloud model with Auto language,
+not marked Yiddish. With any other language nothing changes. Code: `YiddishServer.kt`. The PC must
+be on; when it's off the Worker answers 503 and the take is kept for a retry.

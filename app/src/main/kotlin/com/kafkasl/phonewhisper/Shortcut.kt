@@ -19,6 +19,10 @@ object Shortcut {
 
     fun holdMs(p: SharedPreferences) = p.getLong("shortcut_hold_ms", DEFAULT_HOLD_MS)
 
+    /** The second shortcut, for Yiddish takes ("shortcut_yiddish_keys"); used only with Yiddish picked. */
+    fun yiddishKeys(p: SharedPreferences): Set<Int> =
+        (p.getString("shortcut_yiddish_keys", "") ?: "").split(',').mapNotNull { it.trim().toIntOrNull() }.toSet()
+
     /** Only a one-key shortcut can block its key. */
     fun blocksKey(p: SharedPreferences) = p.getBoolean("shortcut_block_key", false) && keys(p).size == 1
 

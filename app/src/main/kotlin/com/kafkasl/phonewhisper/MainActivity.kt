@@ -64,6 +64,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var shortcutRowSub: TextView
     private lateinit var shortcutKeysRow: LinearLayout
     private lateinit var shortcutKeysRowSub: TextView
+    private lateinit var shortcutYiddishRow: LinearLayout
+    private lateinit var shortcutYiddishRowSub: TextView
     private lateinit var shortcutHoldRow: LinearLayout
     private lateinit var shortcutHoldRowSub: TextView
     private lateinit var shortcutBlockRow: LinearLayout
@@ -250,7 +252,7 @@ class MainActivity : AppCompatActivity() {
         val shortcutRow = settingsRow("Start and stop talking", "", shortcutSwitch) {
             when {
                 shortcutSwitch.isChecked -> setShortcutEnabled(false)
-                Shortcut.keys(prefs()).isEmpty() -> captureShortcut { setShortcutEnabled(true) }
+                Shortcut.keys(prefs()).isEmpty() -> captureShortcut(onSaved = { setShortcutEnabled(true) })
                 else -> setShortcutEnabled(true)
             }
         }
@@ -259,6 +261,10 @@ class MainActivity : AppCompatActivity() {
         shortcutKeysRow = settingsRow("Shortcut keys", "") { captureShortcut(null) }
         shortcutKeysRowSub = shortcutKeysRow.findViewWithTag("subtitle")
         shortcutSection.addView(shortcutKeysRow)
+        // Shown only with Yiddish picked as the language: a second shortcut for Yiddish takes.
+        shortcutYiddishRow = settingsRow("Yiddish shortcut keys", "") { captureShortcut(null, "shortcut_yiddish_keys") }
+        shortcutYiddishRowSub = shortcutYiddishRow.findViewWithTag("subtitle")
+        shortcutSection.addView(shortcutYiddishRow)
         shortcutHoldRow = settingsRow("How long to press", "") { pickHoldTime() }
         shortcutHoldRowSub = shortcutHoldRow.findViewWithTag("subtitle")
         shortcutSection.addView(shortcutHoldRow)
@@ -743,9 +749,10 @@ class MainActivity : AppCompatActivity() {
         cloudModelRowSub.text = TranscriberClient.summaryFor(cloudModel)
         // Only models that accept a language show the row.
         val modelLanguages = TranscriberClient.languagesFor(cloudModel)
-        languageRow.visibility = if (useLocal || modelLanguages.isEmpty()) View.GONE else View.VISIBLE
+        languageRow.visibility = if (useLocal) View.GONE else View.VISIBLE
         val language = prefs().getString("language", "auto") ?: "auto"
         languageRowSub.text = when {
+            language == "yi" -> "Yiddish: hold the mic button for Yiddish. A quick tap stays Auto"
             language in modelLanguages -> TranscriberClient.LANGUAGES[language]
             language == "auto" -> "Auto: the model guesses"
             else -> "Auto: no ${TranscriberClient.LANGUAGES[language]} on this model"
@@ -790,6 +797,8 @@ class MainActivity : AppCompatActivity() {
         shortcutKeysRow.visibility = if (shortcutOn) View.VISIBLE else View.GONE
         shortcutHoldRow.visibility = if (shortcutOn) View.VISIBLE else View.GONE
         shortcutKeysRowSub.text = Shortcut.describe(Shortcut.keys(prefs()))
+        shortcutYiddishRow.visibility = if (shortcutOn && YiddishServer.enabled(prefs())) View.VISIBLE else View.GONE
+        shortcutYiddishRowSub.text = Shortcut.yiddishKeys(prefs()).let { if (it.isEmpty()) "Tap to set" else Shortcut.describe(it) }
         shortcutHoldRowSub.text = Shortcut.describeHold(Shortcut.holdMs(prefs()))
         val oneKey = Shortcut.keys(prefs()).size == 1
         val block = prefs().getBoolean("shortcut_block_key", false)
@@ -815,7 +824,7 @@ class MainActivity : AppCompatActivity() {
      * every key press goes to this dialog; once it has caught a shortcut, the keys move
      * between the buttons normally again.
      */
-    private fun captureShortcut(onSaved: (() -> Unit)?) {
+    private fun captureShortcut(onSaved: (() -> Unit)?, prefKey: String = "shortcut_keys") {
         val ask = "Press the key or keys you want to use, then let go. " +
             "The keys keep working as usual."
         val held = mutableSetOf<Int>()
@@ -850,7 +859,7 @@ class MainActivity : AppCompatActivity() {
             isEnabled = false
             setOnClickListener {
                 val keys = caught ?: return@setOnClickListener
-                prefs().edit().putString("shortcut_keys", Shortcut.encode(keys)).apply()
+                prefs().edit().putString(prefKey, Shortcut.encode(keys)).apply()
                 dialog.dismiss()
                 WhisperAccessibilityService.instance?.applyShortcutSettings()
                 refresh()
@@ -1064,13 +1073,15 @@ class MainActivity : AppCompatActivity() {
     /** Language picker: Auto plus the languages the chosen model accepts. */
     private fun pickLanguage() {
         val model = currentModel()
-        val keys = listOf("auto") + TranscriberClient.languagesFor(model)
+        // Yiddish is always offered: Yiddish takes go to the Yiddish model, whatever the cloud model.
+        val keys = listOf("auto") + (TranscriberClient.languagesFor(model) + "yi").distinct()
         val names = keys.map { if (it == "auto") "Auto" else TranscriberClient.LANGUAGES[it] }.toTypedArray()
         val current = keys.indexOf(prefs().getString("language", "auto")).coerceAtLeast(0)
         android.app.AlertDialog.Builder(this)
             .setTitle("Language")
             .setSingleChoiceItems(names, current) { d, which ->
                 prefs().edit().putString("language", keys[which]).apply()
+                WhisperAccessibilityService.instance?.applyShortcutSettings()
                 d.dismiss(); refresh()
             }
             .setNegativeButton("Cancel", null)

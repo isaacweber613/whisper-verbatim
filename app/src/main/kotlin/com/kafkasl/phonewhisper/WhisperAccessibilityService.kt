@@ -51,6 +51,8 @@ class WhisperAccessibilityService : AccessibilityService() {
         private const val COLOR_RECORDING = 0xDD4F46E5.toInt()
         private const val COLOR_BUSY = 0xDD6B6B6B.toInt()
         private const val COLOR_RETRY = 0xDDF59E0B.toInt()
+        /** Recording a Yiddish take (sent to the Yiddish model on Isaac's PC). */
+        private const val COLOR_YIDDISH = 0xDD0EA5E9.toInt()
         private const val COLOR_FEEDBACK_BG = 0xEE1C1C1E.toInt()
         private const val COLOR_RING = 0xFFE8EAED.toInt()
         private const val NO_WORDS = "No words came back. Try speaking a little louder."
@@ -68,6 +70,8 @@ class WhisperAccessibilityService : AccessibilityService() {
     private var state = State.IDLE
     /** The recording that failed to transcribe, kept so a tap can send it again. */
     private var failedPcm: ByteArray? = null
+    /** The current (or failed) take goes to the Yiddish model; see [YiddishServer]. */
+    private var yiddishTake = false
     private var overlayView: FrameLayout? = null
     private var button: ImageView? = null
     private var bars: LevelBarsView? = null
@@ -88,6 +92,11 @@ class WhisperAccessibilityService : AccessibilityService() {
     private var shortcut: ShortcutMatcher? = null
     private val shortcutHeld = Runnable {
         if (shortcut?.holdElapsed(android.os.SystemClock.uptimeMillis()) == true) onTap("shortcut")
+    }
+    /** The second shortcut, for Yiddish takes; only set while Yiddish is the picked language. */
+    private var shortcutYiddish: ShortcutMatcher? = null
+    private val shortcutYiddishHeld = Runnable {
+        if (shortcutYiddish?.holdElapsed(android.os.SystemClock.uptimeMillis()) == true) onTap("shortcut-yiddish", yiddish = true)
     }
     /** Keeps the button up while a "couldn't type here" message shows. */
     private var showingPasteFailure = false
@@ -139,7 +148,10 @@ class WhisperAccessibilityService : AccessibilityService() {
         val p = prefs()
         val on = Shortcut.enabled(p)
         shortcut = if (on) ShortcutMatcher(Shortcut.keys(p), Shortcut.holdMs(p), Shortcut.blocksKey(p)) else null
+        shortcutYiddish = if (on && YiddishServer.enabled(p) && Shortcut.yiddishKeys(p).isNotEmpty())
+            ShortcutMatcher(Shortcut.yiddishKeys(p), Shortcut.holdMs(p)) else null
         handler.removeCallbacks(shortcutHeld)
+        handler.removeCallbacks(shortcutYiddishHeld)
         // Ask Android for key presses only while the shortcut is on.
         serviceInfo = serviceInfo?.apply {
             val f = android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
@@ -152,16 +164,27 @@ class WhisperAccessibilityService : AccessibilityService() {
     override fun onKeyEvent(event: KeyEvent): Boolean {
         val m = shortcut ?: return false
         if (capturingShortcut) return false
+        val y = shortcutYiddish
         when (event.action) {
-            KeyEvent.ACTION_DOWN -> when (m.onDown(event.keyCode, event.repeatCount, event.eventTime)) {
-                ShortcutMatcher.Result.FIRE -> onTap("shortcut")
-                ShortcutMatcher.Result.WAIT -> {
-                    handler.removeCallbacks(shortcutHeld)
-                    handler.postDelayed(shortcutHeld, Shortcut.holdMs(prefs()))
+            KeyEvent.ACTION_DOWN -> {
+                when (m.onDown(event.keyCode, event.repeatCount, event.eventTime)) {
+                    ShortcutMatcher.Result.FIRE -> onTap("shortcut")
+                    ShortcutMatcher.Result.WAIT -> {
+                        handler.removeCallbacks(shortcutHeld)
+                        handler.postDelayed(shortcutHeld, Shortcut.holdMs(prefs()))
+                    }
+                    ShortcutMatcher.Result.NONE -> Unit
                 }
-                ShortcutMatcher.Result.NONE -> Unit
+                when (y?.onDown(event.keyCode, event.repeatCount, event.eventTime)) {
+                    ShortcutMatcher.Result.FIRE -> onTap("shortcut-yiddish", yiddish = true)
+                    ShortcutMatcher.Result.WAIT -> {
+                        handler.removeCallbacks(shortcutYiddishHeld)
+                        handler.postDelayed(shortcutYiddishHeld, Shortcut.holdMs(prefs()))
+                    }
+                    else -> Unit
+                }
             }
-            KeyEvent.ACTION_UP -> m.onUp(event.keyCode, event.eventTime)
+            KeyEvent.ACTION_UP -> { m.onUp(event.keyCode, event.eventTime); y?.onUp(event.keyCode, event.eventTime) }
         }
         return m.blocks(event.keyCode)
     }
@@ -281,6 +304,11 @@ class WhisperAccessibilityService : AccessibilityService() {
         val holdToDiscard = Runnable {
             if (state == State.RETRY) { discarded = true; discardFailed() }
         }
+        // With Yiddish picked as the language, holding the idle button records a Yiddish take.
+        var heldForYiddish = false
+        val holdForYiddish = Runnable {
+            if (state == State.IDLE && YiddishServer.enabled(prefs())) { heldForYiddish = true; onTap("button-hold", yiddish = true) }
+        }
 
         overlay.setOnTouchListener { v, ev ->
             when (ev.action) {
@@ -288,14 +316,18 @@ class WhisperAccessibilityService : AccessibilityService() {
                     startX = params.x; startY = params.y
                     touchX = ev.rawX; touchY = ev.rawY
                     discarded = false
+                    heldForYiddish = false
                     if (state == State.RETRY) {
                         handler.postDelayed(holdToDiscard, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                    } else if (state == State.IDLE && YiddishServer.enabled(prefs())) {
+                        handler.postDelayed(holdForYiddish, android.view.ViewConfiguration.getLongPressTimeout().toLong())
                     }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (abs(ev.rawX - touchX) + abs(ev.rawY - touchY) >= TAP_THRESHOLD_DP * dp) {
                         handler.removeCallbacks(holdToDiscard)
+                        handler.removeCallbacks(holdForYiddish)
                     }
                     params.x = startX + (ev.rawX - touchX).toInt()
                     params.y = startY + (ev.rawY - touchY).toInt()
@@ -308,9 +340,10 @@ class WhisperAccessibilityService : AccessibilityService() {
                 }
                 MotionEvent.ACTION_UP -> {
                     handler.removeCallbacks(holdToDiscard)
+                    handler.removeCallbacks(holdForYiddish)
                     val moved = abs(ev.rawX - touchX) + abs(ev.rawY - touchY)
-                    if (discarded) {
-                        // The hold already discarded the recording; this isn't a tap.
+                    if (discarded || heldForYiddish) {
+                        // The hold already discarded the recording or started a Yiddish take; this isn't a tap.
                     } else if (moved < TAP_THRESHOLD_DP * dp) {
                         onTap("button")
                     } else {
@@ -505,10 +538,10 @@ class WhisperAccessibilityService : AccessibilityService() {
 
     // --- State machine ---
 
-    /** [via] is "button" or "shortcut", for the anonymous usage counts. */
-    private fun onTap(via: String) {
+    /** [via] is "button" or "shortcut", for the anonymous usage counts. [yiddish] starts a Yiddish take. */
+    private fun onTap(via: String, yiddish: Boolean = false) {
         when (state) {
-            State.IDLE -> startRecording(via)
+            State.IDLE -> startRecording(via, yiddish)
             State.RECORDING -> stopAndTranscribe()
             State.TRANSCRIBING -> toast("Still transcribing. One moment.")
             State.RETRY -> retry()
@@ -533,7 +566,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         setAppearance(COLOR_BUSY)
         setBusy(true)
         showFeedback("Trying again...", 1200)
-        transcribeApi(pcm)
+        if (yiddishTake) transcribeYiddish(pcm) else transcribeApi(pcm)
     }
 
     private fun discardFailed() {
@@ -542,7 +575,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         reset("Recording discarded")
     }
 
-    private fun startRecording(via: String) {
+    private fun startRecording(via: String, yiddish: Boolean = false) {
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             toast("Microphone permission is off. Open Word for Word to turn it on."); return
@@ -570,9 +603,11 @@ class WhisperAccessibilityService : AccessibilityService() {
         }
         pcmStream = ByteArrayOutputStream()
         Analytics.track("recording_started", mapOf("via" to via))
+        yiddishTake = yiddish
         state = State.RECORDING
         setBusy(false)
-        setAppearance(COLOR_RECORDING)
+        setAppearance(if (yiddish) COLOR_YIDDISH else COLOR_RECORDING)
+        if (yiddish) showFeedback("Yiddish", 1500)
         startPulse()
         buzz()
 
@@ -607,7 +642,20 @@ class WhisperAccessibilityService : AccessibilityService() {
         if (pcm.size < 32000 / 3) { reset("Recording too short. Tap, speak, then tap again."); return }
 
         // This fork is cloud-only; on-phone models aren't shipped.
-        transcribeApi(pcm)
+        if (yiddishTake) transcribeYiddish(pcm) else transcribeApi(pcm)
+    }
+
+    /** A Yiddish take: the Yiddish model on Isaac's PC (see [YiddishServer]). */
+    private fun transcribeYiddish(pcm: ByteArray) {
+        val seconds = Math.round(pcm.size / 3200.0) / 10.0
+        YiddishServer.transcribe(WavWriter.encode(pcm)) { result ->
+            if (!result.text.isNullOrBlank()) {
+                Analytics.track("transcribed", mapOf("model" to "yiddish-pc", "seconds" to seconds, "backup_model" to false, "free_minutes" to false))
+                handleTranscriptionResult(result.text, "yiddish-pc")
+            } else {
+                failTranscription(pcm, "yiddish-pc", result)
+            }
+        }
     }
 
     private fun transcribeLocal(pcm: ByteArray, transcriber: LocalTranscriber) {
@@ -650,7 +698,8 @@ class WhisperAccessibilityService : AccessibilityService() {
         val model = if (deviceId != null) TranscriberClient.DEFAULT_MODEL
                     else prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
         val verbatim = prefs().getBoolean("verbatim", false)
-        val language = prefs().getString("language", "auto") ?: "auto"
+        // With Yiddish picked, Yiddish takes go to the Yiddish model; a normal take lets the model guess.
+        val language = (prefs().getString("language", "auto") ?: "auto").let { if (it == "yi") "auto" else it }
         // Audio length to a tenth of a second (16 kHz, 16-bit mono = 32,000 bytes a second), for usage stats.
         val seconds = Math.round(pcm.size / 3200.0) / 10.0
         TranscriberClient.transcribe(wav, apiKey, model, verbatim, language, deviceId) { result ->
