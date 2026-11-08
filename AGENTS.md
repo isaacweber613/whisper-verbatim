@@ -83,3 +83,12 @@ second "Yiddish shortcut keys" shortcut, which shows only with the shortcut on a
 A quick tap or the normal shortcut sends the take to the normal cloud model with Auto language,
 not marked Yiddish. With any other language nothing changes. Code: `YiddishServer.kt`. The PC must
 be on; when it's off the Worker answers 503 and the take is kept for a retry.
+
+Since 0.8.2 (Isaac, 2026-11-08): when the PC is off (Worker 503, or the Worker can't be reached),
+a Yiddish take falls back to the normal model with Auto language and says so. Every Yiddish take is
+kept on the PC for training (D:/yiddish-stt/takes); if the person edits the typed words, the app
+follows that box (text-changed accessibility events) and, when the box is emptied in one step
+(sent), the screen changes, the next recording starts or 2 minutes pass, sends the edited words
+as the take's correct text. Words cut to under half count as deleted and are not sent. Debug
+builds: `am broadcast -a com.isaacweber.wordforword.DEBUG_DICTATE --es text "..." --es yiddishId <id>`
+tests this without audio. Never stop the PC model server to test (Isaac, 2026-11-08).

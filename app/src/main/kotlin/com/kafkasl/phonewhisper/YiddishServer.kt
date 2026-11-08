@@ -16,8 +16,8 @@ import java.util.concurrent.TimeUnit
  * Nothing changes unless Yiddish is the picked language.
  */
 object YiddishServer {
-    private const val URL = "https://yiddishtry.ynbsd6242.workers.dev/api/transcribe"
-    // The Worker's password for its try-it page; it only gates the PC model, which holds no data.
+    private const val BASE = "https://yiddishtry.ynbsd6242.workers.dev"
+    // The Worker's password for its try-it page; it gates the PC model and the saved takes.
     private const val PASSWORD = "4837"
 
     fun enabled(p: SharedPreferences) = p.getString("language", "auto") == "yi"
@@ -28,30 +28,46 @@ object YiddishServer {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    fun transcribe(wav: ByteArray, callback: (TranscriberClient.Result) -> Unit) {
+    /** [callback] gets the result and the take's id on the PC (every Yiddish take is kept for training). */
+    fun transcribe(wav: ByteArray, callback: (TranscriberClient.Result, String?) -> Unit) {
         val request = Request.Builder()
-            .url(URL)
+            .url("$BASE/api/transcribe")
             .header("x-password", PASSWORD)
+            .header("x-client", "app")
             .post(wav.toRequestBody("audio/wav".toMediaType()))
             .build()
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) = callback(TranscriberClient.Result(null,
                 if (e is java.net.UnknownHostException) "No internet connection. Your words weren't sent."
-                else "Couldn't reach the Yiddish model. Try again."))
+                else "Couldn't reach the Yiddish model. Try again."), null)
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
                 val json = try { JSONObject(body) } catch (_: Exception) { null }
                 if (response.isSuccessful && json != null) {
-                    callback(TranscriberClient.Result(json.optString("text", ""), null))
+                    callback(TranscriberClient.Result(json.optString("text", ""), null), json.optString("id").ifBlank { null })
                 } else {
                     val msg = when (response.code) {
                         503 -> "The Yiddish model is offline right now (the computer running it is off)."
                         else -> "The Yiddish model had a problem (${json?.optString("error")?.takeIf { it.isNotBlank() } ?: response.code}). Try again."
                     }
-                    callback(TranscriberClient.Result(null, msg, response.code))
+                    callback(TranscriberClient.Result(null, msg, response.code), null)
                 }
             }
+        })
+    }
+
+    /** Sends the text the person ended up with after editing a Yiddish take, so training uses it. */
+    fun sendCorrection(id: String, text: String) {
+        val body = JSONObject().put("id", id).put("text", text).toString()
+        val request = Request.Builder()
+            .url("$BASE/api/correction")
+            .header("x-password", PASSWORD)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {}
+            override fun onResponse(call: Call, response: Response) { response.close() }
         })
     }
 }

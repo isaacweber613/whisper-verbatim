@@ -6,7 +6,7 @@
      canRequestFilterKeyEvents lets the optional keyboard shortcut see key presses; the
      service turns key filtering on only while that shortcut is on. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeViewFocused|typeWindowsChanged|typeWindowStateChanged"
+    android:accessibilityEventTypes="typeViewFocused|typeWindowsChanged|typeWindowStateChanged|typeViewTextChanged"
     android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canRetrieveWindowContent="true"

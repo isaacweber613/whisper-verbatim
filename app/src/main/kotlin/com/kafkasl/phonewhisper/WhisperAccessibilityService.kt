@@ -72,6 +72,46 @@ class WhisperAccessibilityService : AccessibilityService() {
     private var failedPcm: ByteArray? = null
     /** The current (or failed) take goes to the Yiddish model; see [YiddishServer]. */
     private var yiddishTake = false
+    /** Id of the Yiddish take about to be typed; [trySetText] turns it into a [PendingEdit]. */
+    private var typingYiddishId: String? = null
+
+    /**
+     * Isaac (2026-11-08): when someone edits the words a Yiddish take typed, the edited words go back
+     * to the PC as that take's correct text. The box's text before and after the typed words is
+     * remembered; while the box still starts and ends with them, whatever is in between is the
+     * edited take. It's sent when the box no longer matches (sent or cleared), when the next
+     * recording starts, or after 2 minutes, and only if it changed.
+     */
+    private class PendingEdit(val id: String, val prefix: String, val suffix: String, val original: String) {
+        var latest = original
+    }
+    private var pendingEdit: PendingEdit? = null
+    private val finishEditRunnable = Runnable { finishEdit() }
+
+    private fun watchEdit(event: AccessibilityEvent) {
+        val p = pendingEdit ?: return
+        // Leaving the screen ends the edit with the words as they are.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { finishEdit(); return }
+        if (event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
+        val src = event.source
+        // An emptied box reports its grey hint ("First name", "Message") as text; that counts as empty.
+        val t = if (src != null && isPlaceholder(src)) "" else (src?.text ?: event.text?.joinToString("") ?: return).toString()
+        Log.i(TAG, "Edit watch: box now ${t.length} chars")
+        val seg = if (t.length >= p.prefix.length + p.suffix.length && t.startsWith(p.prefix) && t.endsWith(p.suffix))
+            t.substring(p.prefix.length, t.length - p.suffix.length).trim() else ""
+        // An emptied box (message sent) or one that no longer matches ends the edit with the last good words.
+        if (seg.isNotBlank()) p.latest = seg else finishEdit()
+    }
+
+    private fun finishEdit() {
+        handler.removeCallbacks(finishEditRunnable)
+        val p = pendingEdit ?: return
+        pendingEdit = null
+        // Words cut to under half were being deleted (backspace held down), not corrected.
+        val changed = p.latest.isNotBlank() && p.latest != p.original && p.latest.length * 2 >= p.original.length
+        Log.i(TAG, "Edit watch ended for ${p.id}: ${if (changed) "sending the edited words" else "no change"}")
+        if (changed) YiddishServer.sendCorrection(p.id, p.latest)
+    }
     private var overlayView: FrameLayout? = null
     private var button: ImageView? = null
     private var bars: LevelBarsView? = null
@@ -119,6 +159,8 @@ class WhisperAccessibilityService : AccessibilityService() {
         if (BuildConfig.DEBUG) {
             androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: Context, i: android.content.Intent) {
+                    // --es yiddishId <take id> also tests sending edits back for that Yiddish take.
+                    typingYiddishId = i.getStringExtra("yiddishId")
                     handleTranscriptionResult(i.getStringExtra("text"), "debug")
                 }
             }, android.content.IntentFilter("com.isaacweber.wordforword.DEBUG_DICTATE"),
@@ -129,6 +171,9 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        event?.let { try { watchEdit(it) } catch (_: Exception) {} }
+        // Text changes are only for following edits of a Yiddish take; they don't change what's on screen.
+        if (event?.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
         // When you tap into an empty box, learn its placeholder so it never gets typed later.
         if (event?.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
             event.source?.let { src ->
@@ -602,6 +647,8 @@ class WhisperAccessibilityService : AccessibilityService() {
             return
         }
         pcmStream = ByteArrayOutputStream()
+        finishEdit()
+        typingYiddishId = null
         Analytics.track("recording_started", mapOf("via" to via))
         yiddishTake = yiddish
         state = State.RECORDING
@@ -648,10 +695,16 @@ class WhisperAccessibilityService : AccessibilityService() {
     /** A Yiddish take: the Yiddish model on Isaac's PC (see [YiddishServer]). */
     private fun transcribeYiddish(pcm: ByteArray) {
         val seconds = Math.round(pcm.size / 3200.0) / 10.0
-        YiddishServer.transcribe(WavWriter.encode(pcm)) { result ->
+        YiddishServer.transcribe(WavWriter.encode(pcm)) { result, id ->
             if (!result.text.isNullOrBlank()) {
                 Analytics.track("transcribed", mapOf("model" to "yiddish-pc", "seconds" to seconds, "backup_model" to false, "free_minutes" to false))
+                typingYiddishId = id
                 handleTranscriptionResult(result.text, "yiddish-pc")
+            } else if (result.code == 503 || (result.code == null && result.error != null)) {
+                // Isaac (2026-11-08): when the PC with the Yiddish model is off, use the normal model (Auto).
+                yiddishTake = false
+                handler.post { showFeedback("The Yiddish model is off. Used your normal model.", 3000) }
+                transcribeApi(pcm)
             } else {
                 failTranscription(pcm, "yiddish-pc", result)
             }
@@ -969,6 +1022,13 @@ class WhisperAccessibilityService : AccessibilityService() {
         if (!ok) return false
 
         val cursor = from + insert.length
+        typingYiddishId?.let { id ->
+            typingYiddishId = null
+            finishEdit()
+            pendingEdit = PendingEdit(id, current.substring(0, from), current.substring(to), text.trim())
+            Log.i(TAG, "Watching edits of Yiddish take $id")
+            handler.postDelayed(finishEditRunnable, 2 * 60 * 1000L)
+        }
         node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cursor)
