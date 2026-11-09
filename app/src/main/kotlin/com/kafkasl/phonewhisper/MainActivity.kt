@@ -752,7 +752,10 @@ class MainActivity : AppCompatActivity() {
         languageRow.visibility = if (useLocal) View.GONE else View.VISIBLE
         val language = prefs().getString("language", "auto") ?: "auto"
         languageRowSub.text = when {
-            language == "yi" -> "Yiddish: hold the mic button for Yiddish. A quick tap stays Auto"
+            language == "yi" -> if (BuildConfig.YIDDISH_PC)
+                "Yiddish: hold the mic button for Yiddish. A quick tap stays Auto"
+            else
+                "Yiddish: uses the normal cloud model"
             language in modelLanguages -> TranscriberClient.LANGUAGES[language]
             language == "auto" -> "Auto: the model guesses"
             else -> "Auto: no ${TranscriberClient.LANGUAGES[language]} on this model"

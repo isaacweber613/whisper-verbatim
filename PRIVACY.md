@@ -4,11 +4,17 @@ Word for Word is an Android dictation app. You tap a floating button, speak, and
 
 ## What happens to your recording
 
-When you tap the floating button, the app records audio from the microphone until you tap again. The app sends that recording directly from your phone to OpenRouter, using the OpenRouter API key you entered, to turn it into text. OpenRouter passes the audio to the speech-to-text model you picked in the app.
+When you tap the floating button, the app records audio from the microphone until you tap again. The app sends that recording directly from your phone to OpenRouter, using the OpenRouter API key you entered, to turn it into text. OpenRouter passes the audio to the speech-to-text model you picked in the app. In the Play Store build, if you have not entered a key, the recording goes to Word for Word's server (a Cloudflare Worker), which passes it to OpenRouter and counts your free minutes.
 
-The app doesn't send your audio or text anywhere else.
+Outside the Yiddish mode below, the app doesn't send your audio or text anywhere else.
 
 OpenRouter and the model provider handle your audio under their own terms and privacy policies.
+
+## Yiddish takes
+
+In the GitHub builds, when Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC, through a Cloudflare Worker. The recording and the model's text are kept on that PC to improve the Yiddish model. The app sends a random install id and the app version with the take, so takes from one phone can be grouped for training splits; it is not linked to your name. If the PC is off, the recording uses the normal cloud model instead.
+
+The Play Store build does not use the developer's PC. Yiddish there uses the normal cloud model, and the developer does not receive the recording.
 
 ## What stays on your phone
 
@@ -24,7 +30,7 @@ Word for Word uses Android's Accessibility service for two things:
 - Showing the floating dictation button while your keyboard is open.
 - Typing your dictated words into the text box you're in.
 
-To do this, the app looks at the text box you're in and the text already in it, so it can add your words at the cursor and skip grey placeholder text. It looks only when you tap into a text box or tap the floating button. The app doesn't save, collect, or share anything it reads on your screen.
+To do this, the app looks at the text box you're in and the text already in it, so it can add your words at the cursor and skip grey placeholder text. After a Yiddish take, it also watches that one text box for your edits, so it can send the corrected words back as the take's correct text. It looks only when you tap into a text box or tap the floating button. The app doesn't save, collect, or share anything else it reads on your screen.
 
 ## Usage data
 
@@ -38,11 +44,11 @@ What it sends:
 
 PostHog also sees the internet address the data comes from, as any web service does.
 
-It never sends your recordings, your words, your transcription history, or your API key.
+PostHog never receives your recordings, your words, your transcription history, or your API key.
 
 ## Data collection
 
-Word for Word has no accounts, no ads, and no crash reporting. The developer doesn't receive your recordings, your text, or your API key.
+Word for Word has no accounts, no ads, and no crash reporting. The developer doesn't receive your recordings, your text, or your API key, except for Yiddish takes described above.
 
 ## Open source
 

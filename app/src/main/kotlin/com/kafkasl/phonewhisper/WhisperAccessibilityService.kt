@@ -72,45 +72,115 @@ class WhisperAccessibilityService : AccessibilityService() {
     private var failedPcm: ByteArray? = null
     /** The current (or failed) take goes to the Yiddish model; see [YiddishServer]. */
     private var yiddishTake = false
-    /** Id of the Yiddish take about to be typed; [trySetText] turns it into a [PendingEdit]. */
-    private var typingYiddishId: String? = null
-
     /**
      * Isaac (2026-11-08): when someone edits the words a Yiddish take typed, the edited words go back
      * to the PC as that take's correct text. The box's text before and after the typed words is
      * remembered; while the box still starts and ends with them, whatever is in between is the
-     * edited take. It's sent when the box no longer matches (sent or cleared), when the next
-     * recording starts, or after 2 minutes, and only if it changed.
+     * edited take. A change in another text box is ignored (2026-11-09 review). It's sent when the
+     * box is emptied, the app is left, the next recording starts, or 2 minutes after the last edit.
+     * The outcome and whether words were appended are sent too, so training can exclude or review.
      */
-    private class PendingEdit(val id: String, val prefix: String, val suffix: String, val original: String) {
+    private class PendingEdit(
+        val id: String,
+        val prefix: String,
+        val suffix: String,
+        val original: String,
+        val packageName: String,
+        val windowId: Int,
+        val viewId: String?,
+        val className: String?,
+        val typedEnd: Int,
+    ) {
         var latest = original
+        var emptied = false
+        var appended = false
     }
     private var pendingEdit: PendingEdit? = null
-    private val finishEditRunnable = Runnable { finishEdit() }
+    private val finishEditRunnable = Runnable { finishEdit("timeout") }
+
+    /** True when a text-change event came from the box this take was typed into. */
+    private fun sameTarget(event: AccessibilityEvent, p: PendingEdit): Boolean {
+        val pkg = event.packageName?.toString() ?: return false
+        if (pkg != p.packageName) return false
+        if (event.windowId != -1 && p.windowId != -1 && event.windowId != p.windowId) return false
+        val src = event.source ?: return false
+        val view = src.viewIdResourceName
+        if (p.viewId != null && view != null) return p.viewId == view
+        val cls = src.className?.toString()
+        return p.className == null || cls == null || p.className == cls
+    }
+
+    /** Waits 2 minutes after the last edit, so a slow edit is not cut off by a fixed clock. */
+    private fun resetEditTimer() {
+        handler.removeCallbacks(finishEditRunnable)
+        handler.postDelayed(finishEditRunnable, 2 * 60 * 1000L)
+    }
 
     private fun watchEdit(event: AccessibilityEvent) {
         val p = pendingEdit ?: return
-        // Leaving the screen ends the edit with the words as they are.
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) { finishEdit(); return }
+        // Leaving the app ends the edit with the words as they are. A dialog or keyboard in the
+        // same app does not: those events carry the same package.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString()
+            if (pkg != null && pkg != p.packageName) finishEdit("left")
+            return
+        }
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
-        val src = event.source
+        if (!sameTarget(event, p)) return
+        val src = event.source ?: return
+        val raw = src.text?.toString() ?: return
         // An emptied box reports its grey hint ("First name", "Message") as text; that counts as empty.
-        val t = if (src != null && isPlaceholder(src)) "" else (src?.text ?: event.text?.joinToString("") ?: return).toString()
+        val t = if (isPlaceholder(src)) "" else raw
         Log.i(TAG, "Edit watch: box now ${t.length} chars")
+        if (t.isBlank()) {
+            p.emptied = true
+            finishEdit("sent")
+            return
+        }
+        // With an empty box, words typed after the take would become part of the label. Keep them
+        // (they may be a correction) but flag the take so the builder can review it.
+        if (p.suffix.isEmpty() && event.fromIndex >= p.typedEnd && event.removedCount == 0 && event.addedCount > 0) {
+            p.appended = true
+        }
         val seg = if (t.length >= p.prefix.length + p.suffix.length && t.startsWith(p.prefix) && t.endsWith(p.suffix))
-            t.substring(p.prefix.length, t.length - p.suffix.length).trim() else ""
-        // An emptied box (message sent) or one that no longer matches ends the edit with the last good words.
-        if (seg.isNotBlank()) p.latest = seg else finishEdit()
+            t.substring(p.prefix.length, t.length - p.suffix.length).trim() else null
+        if (seg != null) {
+            if (seg.isNotBlank()) {
+                p.latest = seg
+                resetEditTimer()
+            } else {
+                p.emptied = true
+                finishEdit("sent")
+            }
+        } else if (event.fromIndex == 0 && event.removedCount >= p.original.length) {
+            // The whole box was selected and replaced; the new words are the take.
+            p.latest = t.trim()
+            resetEditTimer()
+        }
+        // Any other non-matching change is outside the take (a prefix, another field, or a partial
+        // event). Keep the last good words; the timer or leaving the app sends them.
     }
 
-    private fun finishEdit() {
+    private fun finishEdit(reason: String) {
         handler.removeCallbacks(finishEditRunnable)
         val p = pendingEdit ?: return
         pendingEdit = null
-        // Words cut to under half were being deleted (backspace held down), not corrected.
-        val changed = p.latest.isNotBlank() && p.latest != p.original && p.latest.length * 2 >= p.original.length
-        Log.i(TAG, "Edit watch ended for ${p.id}: ${if (changed) "sending the edited words" else "no change"}")
-        if (changed) YiddishServer.sendCorrection(p.id, p.latest)
+        val text = p.latest.trim()
+        val changed = text.isNotBlank() && text != p.original
+        val kept = changed && text.length * 2 >= p.original.length
+        val outcome = when {
+            kept -> "edited"
+            changed -> "cut_down"
+            p.emptied -> "sent_unchanged"
+            reason == "left" -> "left"
+            reason == "replaced" -> "replaced"
+            reason == "next_take" -> "next_take"
+            reason == "timeout" -> "timeout"
+            else -> "unchanged"
+        }
+        Log.i(TAG, "Edit watch ended for ${p.id}: $outcome")
+        YiddishServer.sendCorrection(p.id, if (kept) text else null, outcome,
+            BuildConfig.VERSION_NAME, YiddishServer.installId(this), p.appended)
     }
     private var overlayView: FrameLayout? = null
     private var button: ImageView? = null
@@ -160,8 +230,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: Context, i: android.content.Intent) {
                     // --es yiddishId <take id> also tests sending edits back for that Yiddish take.
-                    typingYiddishId = i.getStringExtra("yiddishId")
-                    handleTranscriptionResult(i.getStringExtra("text"), "debug")
+                    handleTranscriptionResult(i.getStringExtra("text"), "debug", i.getStringExtra("yiddishId"))
                 }
             }, android.content.IntentFilter("com.isaacweber.wordforword.DEBUG_DICTATE"),
                 androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
@@ -647,8 +716,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             return
         }
         pcmStream = ByteArrayOutputStream()
-        finishEdit()
-        typingYiddishId = null
+        finishEdit("next_take")
         Analytics.track("recording_started", mapOf("via" to via))
         yiddishTake = yiddish
         state = State.RECORDING
@@ -695,11 +763,12 @@ class WhisperAccessibilityService : AccessibilityService() {
     /** A Yiddish take: the Yiddish model on Isaac's PC (see [YiddishServer]). */
     private fun transcribeYiddish(pcm: ByteArray) {
         val seconds = Math.round(pcm.size / 3200.0) / 10.0
-        YiddishServer.transcribe(WavWriter.encode(pcm)) { result, id ->
+        val appVersion = BuildConfig.VERSION_NAME
+        val install = YiddishServer.installId(this)
+        YiddishServer.transcribe(WavWriter.encode(pcm), appVersion, install) { result, id ->
             if (!result.text.isNullOrBlank()) {
                 Analytics.track("transcribed", mapOf("model" to "yiddish-pc", "seconds" to seconds, "backup_model" to false, "free_minutes" to false))
-                typingYiddishId = id
-                handleTranscriptionResult(result.text, "yiddish-pc")
+                handleTranscriptionResult(result.text, "yiddish-pc", id)
             } else if (result.code == 503 || (result.code == null && result.error != null)) {
                 // Isaac (2026-11-08): when the PC with the Yiddish model is off, use the normal model (Auto).
                 yiddishTake = false
@@ -798,7 +867,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     /** [usedModel] is the model that wrote [text], saved with it in history. */
-    private fun handleTranscriptionResult(text: String?, usedModel: String? = null) {
+    private fun handleTranscriptionResult(text: String?, usedModel: String? = null, yiddishId: String? = null) {
         if (text.isNullOrBlank()) {
             handler.post {
                 toast("No speech detected")
@@ -825,7 +894,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             if (apiKey.isBlank()) {
                 handler.post {
                     toast("Post-processing needs API key. Using raw text.")
-                    injectText(text)
+                    injectText(text, yiddishId)
                     state = State.IDLE
                     setBusy(false)
                     setAppearance(COLOR_IDLE)
@@ -838,9 +907,9 @@ class WhisperAccessibilityService : AccessibilityService() {
             PostProcessor.process(text, prompt, apiKey) { result ->
                 handler.post {
                     if (result.text != null && result.text.isNotBlank()) {
-                        injectText(result.text)
+                        injectText(result.text, yiddishId)
                     } else {
-                        injectText(text)
+                        injectText(text, yiddishId)
                         showFeedback("Cleanup failed. Inserted your exact words.", 3000)
                     }
                     state = State.IDLE
@@ -850,7 +919,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             }
         } else {
             handler.post {
-                injectText(text)
+                injectText(text, yiddishId)
                 state = State.IDLE
                 setBusy(false)
                 setAppearance(COLOR_IDLE)
@@ -872,7 +941,7 @@ class WhisperAccessibilityService : AccessibilityService() {
      * Only when no box accepts typed text (for example, Termux's terminal) does it
      * fall back to copying to the clipboard and pasting, and it says so on screen.
      */
-    private fun injectText(text: String) {
+    private fun injectText(text: String, yiddishId: String? = null) {
         val candidates = findInjectionCandidates()
         Log.i(TAG, "Injecting text into ${candidates.size} candidate node(s)")
 
@@ -880,7 +949,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         try {
             // First pass: set the text directly. No clipboard involved.
             for (candidate in candidates) {
-                if (trySetText(candidate, text)) { typed = true; break }
+                if (trySetText(candidate, text, yiddishId)) { typed = true; break }
             }
             // Second pass, only for boxes that refuse direct typing: clipboard + paste.
             if (!typed) {
@@ -891,6 +960,11 @@ class WhisperAccessibilityService : AccessibilityService() {
                     if (tryPaste(candidate)) { pasted = true; break }
                 }
                 Analytics.track("text_inserted", mapOf("method" to if (pasted) "pasted" else "clipboard_only"))
+                // A pasted or untyped take has no edit tracking; say so instead of leaving it unedited.
+                yiddishId?.let {
+                    YiddishServer.sendCorrection(it, null, if (pasted) "pasted" else "not_typed",
+                        BuildConfig.VERSION_NAME, YiddishServer.installId(this), false)
+                }
                 showFeedback(if (pasted) "Pasted (this box doesn't accept typed text)"
                              else "Couldn't type here. Copied to clipboard and saved to history", 3000)
                 if (!pasted) {
@@ -982,7 +1056,7 @@ class WhisperAccessibilityService : AccessibilityService() {
      * Inserts the text at the cursor (or over the selected text) by setting the box's
      * whole contents, then puts the cursor right after the new words.
      */
-    private fun trySetText(node: AccessibilityNodeInfo, text: String): Boolean {
+    private fun trySetText(node: AccessibilityNodeInfo, text: String, yiddishId: String? = null): Boolean {
         logNode("Trying node", node)
         if (!node.isEditable && node.className?.toString()?.contains("EditText") != true) return false
 
@@ -1002,7 +1076,13 @@ class WhisperAccessibilityService : AccessibilityService() {
             (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
             val ok = tryPaste(node)
             Log.i(TAG, "No cursor in a box with text; pasted => $ok")
-            if (ok) return true
+            if (ok) {
+                yiddishId?.let {
+                    YiddishServer.sendCorrection(it, null, "pasted", BuildConfig.VERSION_NAME,
+                        YiddishServer.installId(this), false)
+                }
+                return true
+            }
         }
         val start = if (selStart in 0..current.length) selStart else current.length
         val end = if (selEnd in 0..current.length) selEnd else start
@@ -1022,12 +1102,14 @@ class WhisperAccessibilityService : AccessibilityService() {
         if (!ok) return false
 
         val cursor = from + insert.length
-        typingYiddishId?.let { id ->
-            typingYiddishId = null
-            finishEdit()
-            pendingEdit = PendingEdit(id, current.substring(0, from), current.substring(to), text.trim())
+        yiddishId?.let { id ->
+            finishEdit("replaced")
+            pendingEdit = PendingEdit(
+                id, current.substring(0, from), current.substring(to), text.trim(),
+                node.packageName?.toString().orEmpty(), node.windowId, node.viewIdResourceName,
+                node.className?.toString(), from + insert.length)
             Log.i(TAG, "Watching edits of Yiddish take $id")
-            handler.postDelayed(finishEditRunnable, 2 * 60 * 1000L)
+            resetEditTimer()
         }
         node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
