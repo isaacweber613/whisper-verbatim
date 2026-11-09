@@ -17,9 +17,7 @@ import java.util.concurrent.TimeUnit
  * Worker (yiddish-stt repo, tryout/). A normal tap keeps using the cloud model with Auto language.
  * Nothing changes unless Yiddish is the picked language.
  *
- * The PC keeps every take for training. That is why the Play build turns this path off
- * (BuildConfig.YIDDISH_PC): it must not collect audio without a clear Play data-safety disclosure.
- * The GitHub builds keep it. See PRIVACY.md.
+ * The PC keeps every take for training, in every build including Play. See PRIVACY.md.
  */
 object YiddishServer {
     private const val BASE = "https://yiddishtry.ynbsd6242.workers.dev"
@@ -27,7 +25,7 @@ object YiddishServer {
     private const val PASSWORD = "4837"
 
     fun enabled(p: SharedPreferences) =
-        BuildConfig.YIDDISH_PC && p.getString("language", "auto") == "yi"
+        p.getString("language", "auto") == "yi"
 
     /**
      * A random id for this install, for voice-disjoint training splits. It is not linked to the

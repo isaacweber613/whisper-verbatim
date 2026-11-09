@@ -76,7 +76,7 @@
     <h2>What happens to your recording</h2>
     <p>When you tap the floating button, the app records audio from the microphone until you tap again. The recording goes to the cloud speech-to-text model you picked, through OpenRouter, using the OpenRouter API key you entered.</p>
     <p>In the Play Store build, if you have not entered a key, the recording goes to Word for Word's server (a Cloudflare Worker), which passes it to OpenRouter and counts your free minutes. The server does not keep the recording.</p>
-    <p>In the GitHub builds, when Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC, through a Cloudflare Worker. The recording and the model's text are kept on that PC to improve the Yiddish model. A random install id and the app version go with the take; they are not linked to your name. If the PC is off, the normal cloud model is used. The Play Store build does not use the developer's PC; Yiddish there uses the normal cloud model.</p>
+    <p>When Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC, through a Cloudflare Worker. The recording and the model's text are kept on that PC to improve the Yiddish model. A random install id and the app version go with the take; they are not linked to your name. If the PC is off, the normal cloud model is used.</p>
 
     <h2>API keys</h2>
     <p>Your OpenRouter API key is stored locally on your device in the app's private storage. It is used only to authenticate requests to OpenRouter.</p>

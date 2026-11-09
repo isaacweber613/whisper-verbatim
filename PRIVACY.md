@@ -12,9 +12,7 @@ OpenRouter and the model provider handle your audio under their own terms and pr
 
 ## Yiddish takes
 
-In the GitHub builds, when Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC, through a Cloudflare Worker. The recording and the model's text are kept on that PC to improve the Yiddish model. The app sends a random install id and the app version with the take, so takes from one phone can be grouped for training splits; it is not linked to your name. If the PC is off, the recording uses the normal cloud model instead.
-
-The Play Store build does not use the developer's PC. Yiddish there uses the normal cloud model, and the developer does not receive the recording.
+When Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC, through a Cloudflare Worker. The recording and the model's text are kept on that PC to improve the Yiddish model. The app sends a random install id and the app version with the take, so takes from one phone can be grouped for training splits; it is not linked to your name. If the PC is off, the recording uses the normal cloud model instead.
 
 ## What stays on your phone
 

@@ -48,15 +48,12 @@ android {
             buildConfigField("String", "APK_NAME", "\"WordForWord.apk\"")
             buildConfigField("boolean", "UPDATES", "true")
             buildConfigField("String", "SERVICE_URL", "\"\"")
-            // Yiddish takes go to the developer's PC and are kept for training; GitHub builds only.
-            buildConfigField("boolean", "YIDDISH_PC", "true")
         }
         create("selfInstall") {
             dimension = "updates"
             buildConfigField("String", "APK_NAME", "\"WordForWordSelfUpdate.apk\"")
             buildConfigField("boolean", "UPDATES", "true")
             buildConfigField("String", "SERVICE_URL", "\"\"")
-            buildConfigField("boolean", "YIDDISH_PC", "true")
         }
         create("play") {
             dimension = "updates"
@@ -64,8 +61,6 @@ android {
             buildConfigField("boolean", "UPDATES", "false")
             // Free minutes through Word for Word's server (server/, FreeMinutes.kt).
             buildConfigField("String", "SERVICE_URL", "\"https://word-for-word.ynbsd6242.workers.dev\"")
-            // No developer-PC audio in the Play build: it would need a clear data-safety disclosure.
-            buildConfigField("boolean", "YIDDISH_PC", "false")
         }
     }
 

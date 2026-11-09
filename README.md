@@ -44,7 +44,7 @@ Both run on Android 6 and newer. The app walks you through the microphone, the a
 - **Anonymous usage counts** through PostHog, which you can turn off with "Share usage data" in Settings.
 - **Yiddish**: with Yiddish picked, holding the mic button (or a second shortcut) sends that recording to a
   Yiddish speech model on the developer's PC. The recording and text are kept for training. If the PC is
-  off, it falls back to the normal model. The Play Store build does not use the developer's PC.
+  off, it falls back to the normal model.
 
 Word for Word installs as `com.isaacweber.wordforword`, separately from Phone Whisper. Versions before 0.5.0
 were called Whisper Verbatim and used a different package; uninstall that once Word for Word is set up.
@@ -58,7 +58,7 @@ recording.
 ## Privacy
 
 Audio goes from your phone to OpenRouter, which passes it to the model you picked. There is no Word for Word
-server in the GitHub builds. Yiddish takes in the GitHub builds also go to the developer's PC and are kept
+server in the GitHub builds. Yiddish takes also go to the developer's PC and are kept
 for training. Full policy: [PRIVACY.md](PRIVACY.md).
 
 ## Tips
