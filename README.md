@@ -30,7 +30,8 @@ Both run on Android 6 and newer. The app walks you through the microphone, the a
   (Microsoft, the default), GPT Transcribe (OpenAI), Voxtral Mini Transcribe 3 (Mistral), and Scribe v2
   (ElevenLabs). You can also paste the ID of any speech-to-text model on OpenRouter.
 - **About 60 languages**, or Auto to let the model detect it.
-- **Verbatim mode** (off by default) asks the model to keep "um", "uh", repeats, and false starts.
+- **Verbatim mode** (off by default) asks the model to keep "um", "uh", repeats, and false starts. When it's
+  off, models with a cleanup switch are asked to remove them instead.
 - **Types straight into the box** at the cursor. If an app doesn't allow that, the text is copied to the
   clipboard and saved in history.
 - **The mic button shows only while the keyboard is open**, with bars that move with your voice and a short

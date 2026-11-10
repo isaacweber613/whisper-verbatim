@@ -56,4 +56,30 @@ class TranscriberClientTest {
         assertEquals("microsoft/mai-transcribe-2", TranscriberClient.fallbackFor("openai/gpt-transcribe"))
         assertEquals("microsoft/mai-transcribe-2", TranscriberClient.fallbackFor("deepgram/nova-3"))
     }
+
+    private fun azureStyle(verbatim: Boolean): String {
+        val body = TranscriberClient.buildBodyJson("", "microsoft/mai-transcribe-2", verbatim)
+        return body.getJSONObject("provider").getJSONObject("options")
+            .getJSONObject("azure").getJSONObject("enhancedMode")
+            .getJSONObject("modelOptions").getString("transcribeStyle")
+    }
+
+    @Test fun `verbatim off asks MAI for clean text`() {
+        assertEquals("clean", azureStyle(false))
+    }
+
+    @Test fun `verbatim on asks MAI to keep fillers`() {
+        assertEquals("verbatim", azureStyle(true))
+    }
+
+    @Test fun `verbatim off asks Scribe for non-verbatim text`() {
+        val body = TranscriberClient.buildBodyJson("", "elevenlabs/scribe-v2", false)
+        assertTrue(body.getJSONObject("provider").getJSONObject("options")
+            .getJSONObject("elevenlabs").getBoolean("no_verbatim"))
+    }
+
+    @Test fun `verbatim off leaves models without a cleanup switch alone`() {
+        val body = TranscriberClient.buildBodyJson("", "openai/gpt-transcribe", false)
+        assertFalse(body.has("provider"))
+    }
 }

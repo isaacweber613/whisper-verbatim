@@ -175,7 +175,7 @@ class MainActivity : AppCompatActivity() {
             isClickable = false
         }
         verbatimRow = settingsRow("Verbatim mode",
-            "On: asks the model to keep \"um,\" \"uh,\" repeats, and false starts. Off: the model's own default, which may tidy them up",
+            "On: asks the model to keep \"um,\" \"uh,\" repeats, and false starts. Off: asks it to remove them when the model has a cleanup switch",
             verbatimSwitch) {
             val newVal = !verbatimSwitch.isChecked
             prefs().edit().putBoolean("verbatim", newVal).apply()

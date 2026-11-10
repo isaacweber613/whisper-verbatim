@@ -33,7 +33,7 @@ object TranscriberClient {
     val CLOUD_MODELS = listOf(
         CloudModel("microsoft/mai-transcribe-2", "MAI-Transcribe 2", "Microsoft", "\$0.10/hour",
             "Most accurate of the three tested (2.0% word errors on the Artificial Analysis benchmark) and the fastest, " +
-            "about half a second per clip. Has its own verbatim switch, which Verbatim mode turns on.\n\n" +
+            "about half a second per clip. Has its own verbatim switch, which Verbatim mode turns on; off asks it for clean text.\n\n" +
             "Still a preview. The \$0.10/hour price is a launch promotion through December 31, 2026."),
         CloudModel("openai/gpt-transcribe", "GPT Transcribe", "OpenAI", "\$0.27/hour",
             "OpenAI's speech-to-text model, released August 2026. Has no verbatim switch, " +
@@ -43,7 +43,7 @@ object TranscriberClient {
             "Kept every \"um\" and repeated word in testing. Released October 2026."),
         CloudModel("elevenlabs/scribe-v2", "Scribe v2", "ElevenLabs", "\$0.22/hour",
             "Close second on accuracy (2.2% word errors) but slower, about 1.5 seconds per clip. " +
-            "Verbatim by default. Writes times with :00, so \"six\" becomes \"6:00.\"")
+            "Verbatim by default; Verbatim mode off asks it for clean text. Writes times with :00, so \"six\" becomes \"6:00.\"")
     )
 
     /** Spoken-language choices besides "auto", where the model guesses, by ISO-639-1 code. */
@@ -139,30 +139,46 @@ object TranscriberClient {
     }
 
     /**
-     * Provider-specific settings that make each provider keep fillers ("um", "uh"),
-     * repeats, and false starts. OpenRouter forwards only the block for the provider
-     * that serves the request, so listing several is safe.
+     * Each provider's switch for keeping fillers ("um", "uh"), repeats, and false
+     * starts. Verbatim turns it on; cleaning turns it off. OpenRouter forwards only
+     * the block for the provider that serves the request, so listing several is safe.
      */
-    private fun verbatimOptions(): JSONObject = JSONObject()
-        // Microsoft (MAI-Transcribe): verbatim vs clean style switch
+    private fun styleOptions(verbatim: Boolean): JSONObject = JSONObject()
+        // Microsoft (MAI-Transcribe): verbatim vs clean style switch. Its default is
+        // verbatim, so Verbatim mode off has to ask for clean explicitly.
         .put("azure", JSONObject().put("enhancedMode",
-            JSONObject().put("modelOptions", JSONObject().put("transcribeStyle", "verbatim"))))
-        // ElevenLabs (Scribe): verbatim is its default; make it explicit
-        .put("elevenlabs", JSONObject().put("no_verbatim", false))
+            JSONObject().put("modelOptions", JSONObject().put("transcribeStyle",
+                if (verbatim) "verbatim" else "clean"))))
+        // ElevenLabs (Scribe): verbatim is its default too
+        .put("elevenlabs", JSONObject().put("no_verbatim", !verbatim))
         // Deepgram (Nova): strips "uh" and "um" unless asked to keep them
-        .put("deepgram", JSONObject().put("filler_words", true))
+        .put("deepgram", JSONObject().put("filler_words", verbatim))
         // AssemblyAI (Universal): removes fillers unless disfluencies is on
-        .put("assemblyai", JSONObject().put("disfluencies", true))
+        .put("assemblyai", JSONObject().put("disfluencies", verbatim))
 
-    /** With verbatim off, no provider options are sent and each model uses its own default. */
-    fun buildBody(wavData: ByteArray, model: String, verbatim: Boolean, language: String = "auto"): String {
-        val b64 = Base64.encodeToString(wavData, Base64.NO_WRAP)
+    /**
+     * Built-in models with a switch that removes fillers. Custom model IDs keep the
+     * old behavior: no options are sent with verbatim off, so they use their default.
+     */
+    private val CLEAN_SWITCH_MODELS = setOf(
+        "microsoft/mai-transcribe-2",
+        "elevenlabs/scribe-v2",
+    )
+
+    fun buildBody(wavData: ByteArray, model: String, verbatim: Boolean, language: String = "auto"): String =
+        buildBodyJson(Base64.encodeToString(wavData, Base64.NO_WRAP), model, verbatim, language).toString()
+
+    /** The request body, separate from Android's Base64 encoder so it can be unit tested. */
+    internal fun buildBodyJson(audioBase64: String, model: String, verbatim: Boolean,
+                               language: String = "auto"): JSONObject {
         val body = JSONObject()
             .put("model", model)
-            .put("input_audio", JSONObject().put("data", b64).put("format", "wav"))
+            .put("input_audio", JSONObject().put("data", audioBase64).put("format", "wav"))
         languageCode(model, language)?.let { body.put("language", it) }
-        if (verbatim) body.put("provider", JSONObject().put("options", verbatimOptions()))
-        return body.toString()
+        if (verbatim || model in CLEAN_SWITCH_MODELS) {
+            body.put("provider", JSONObject().put("options", styleOptions(verbatim)))
+        }
+        return body
     }
 
     /**
