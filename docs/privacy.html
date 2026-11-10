@@ -1,120 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Privacy Policy — Word for Word</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    .legal-content {
-      max-width: 700px;
-      margin: 0 auto;
-      padding: 100px 24px 120px;
-    }
-    .legal-content h1 {
-      font-size: 32px;
-      margin-bottom: 40px;
-    }
-    .legal-content h2 {
-      font-size: 20px;
-      margin-top: 40px;
-      margin-bottom: 16px;
-    }
-    .legal-content p {
-      margin-bottom: 16px;
-      color: var(--text-secondary);
-    }
-    .legal-content ul {
-      margin-bottom: 24px;
-      margin-left: 20px;
-      color: var(--text-secondary);
-    }
-    .legal-content li {
-      margin-bottom: 8px;
-    }
-    .back-home {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 500;
-      margin-bottom: 32px;
-    }
-  </style>
-</head>
-<body>
-
-  <nav id="nav">
-    <div class="nav-inner">
-      <a href="index.html" class="nav-logo">
-        <svg class="nav-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <rect width="40" height="40" rx="10" fill="var(--accent)"/>
-          <rect x="16" y="9" width="8" height="14" rx="4" fill="white"/>
-          <path d="M11 21c0 4.97 4.03 9 9 9s9-4.03 9-9" stroke="white" stroke-width="2" stroke-linecap="round" fill="none"/>
-          <line x1="20" y1="30" x2="20" y2="35" stroke="white" stroke-width="2" stroke-linecap="round"/>
-          <line x1="16" y1="35" x2="24" y2="35" stroke="white" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <span>Word for Word</span>
-      </a>
-    </div>
-  </nav>
-
-  <main class="legal-content">
-    <a href="index.html" class="back-home">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-      Back to home
-    </a>
-
-    <h1>Privacy Policy</h1>
-    
-    <p>Last updated: November 2026</p>
-
-    <p>Word for Word is an Android dictation app that records speech, transcribes it, and inserts the result into text fields across apps.</p>
-
-    <h2>What happens to your recording</h2>
-    <p>When you tap the floating button, the app records audio from the microphone until you tap again. The recording goes to the cloud speech-to-text model you picked, through OpenRouter, using the OpenRouter API key you entered.</p>
-    <p>In the Play Store build, if you have not entered a key, the recording goes to Word for Word's server (a Cloudflare Worker), which passes it to OpenRouter and counts your free minutes. The server does not keep the recording.</p>
-    <p>When Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC, through a Cloudflare Worker. The recording and the model's text are kept on that PC to improve the Yiddish model. A random install id and the app version go with the take; they are not linked to your name. If the PC is off, the normal cloud model is used.</p>
-
-    <h2>API keys</h2>
-    <p>Your OpenRouter API key is stored locally on your device in the app's private storage. It is used only to authenticate requests to OpenRouter.</p>
-    <p>The Play Store build also has a small Word for Word server for free minutes. It does not receive your key.</p>
-
-    <h2>Accessibility Service</h2>
-    <p>Word for Word uses Android's Accessibility Service to find the focused text field and insert dictated text. After a Yiddish take, it also watches that one text box for your edits, so it can send the corrected words back as the take's correct text.</p>
-    <ul>
-      <li>It does not monitor your browsing.</li>
-      <li>It does not collect screen content for analytics.</li>
-      <li>It does not perform background automation or keylogging.</li>
-    </ul>
-
-    <h2>History and usage data</h2>
-    <p>Transcriptions are kept in the app's private history for 24 hours by default, or longer if you turn that on. You can delete them at any time.</p>
-    <p>The app sends anonymous usage counts to PostHog, an analytics service, unless you turn off "Share usage data". The counts include the app version, Android version, phone make and model, a random install id, and events such as a recording starting or a transcription failing. PostHog never receives your recordings, your words, your history, or your API key.</p>
-
-    <h2>Data collection</h2>
-    <p>Word for Word has no accounts, no ads, and no crash reporting. The developer does not receive your recordings, your text, or your API key, except for Yiddish takes described above.</p>
-
-    <h2>Open source</h2>
-    <p>Word for Word is open source, based on Phone Whisper. You can read the code at <a href="https://github.com/isaacweber613/whisper-verbatim">github.com/isaacweber613/whisper-verbatim</a>.</p>
-
-    <h2>Contact</h2>
-    <p>For privacy questions, open an issue at <a href="https://github.com/isaacweber613/whisper-verbatim/issues">github.com/isaacweber613/whisper-verbatim/issues</a>.</p>
-  </main>
-
-  <footer id="footer">
-    <div class="footer-inner">
-      <div class="footer-links">
-        <a href="index.html">Home</a>
-        <span class="sep">·</span>
-        <a href="https://github.com/isaacweber613/whisper-verbatim" target="_blank" rel="noopener">GitHub</a>
-        <span class="sep">·</span>
-        <a href="https://github.com/isaacweber613/whisper-verbatim/issues">Contact</a>
-      </div>
-    </div>
-  </footer>
-
-</body>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy | Word for Word</title>
+<style>
+body { max-width: 760px; margin: 0 auto; padding: 32px 24px 64px;
+       font: 17px/1.65 system-ui, sans-serif; color: #20212b; background: #fff; }
+h1 { line-height: 1.2; font-size: 32px; } h2 { line-height: 1.3; margin-top: 36px; font-size: 23px; }
+a { color: #4338ca; overflow-wrap: anywhere; } li { margin: 8px 0; }
+</style>
+<main>
+<h1>Privacy policy for Word for Word</h1>
+<p>Last updated: November 10, 2026. Developer: Isaac Weber.</p>
+<p>Word for Word is an Android dictation app. You tap a floating button, speak, and the app types your exact words into the text box you&#x27;re in.</p>
+<h2>What happens to your recording</h2>
+<p>After you agree to cloud dictation, tapping the floating button records audio until you tap again. With your own API key, the app sends the recording directly from your phone to OpenRouter. OpenRouter passes the audio to the speech-to-text model you picked. In the Play Store build, if you have not entered a key, the recording goes through Word for Word&#x27;s server (a Cloudflare Worker), which passes it to OpenRouter. That server processes the recording in transit and does not store the recording or transcription in its database.</p>
+<p>For free minutes, the app also sends a SHA-256 hash of its Android device ID. The server stores that hash, the UTC calendar month, and seconds used in a Cloudflare D1 database to enforce the monthly allowance. The hash can stay the same after reinstalling the app. These records currently have no automatic deletion schedule.</p>
+<p>Outside the Yiddish mode below, the app doesn&#x27;t send your audio or text anywhere else.</p>
+<p>OpenRouter and the model provider handle your audio under their own terms and privacy policies.</p>
+<h2>Yiddish takes</h2>
+<p>When Yiddish is selected, holding the mic button or using the Yiddish shortcut asks for separate training consent before the first recording. If you agree, that recording goes to a Yiddish speech model on the developer&#x27;s PC through a Cloudflare Worker. The recording, model text, and your later corrected words are kept on that PC for review and training to improve the Yiddish model. The app sends a random install ID and app version so takes from one installation can be grouped for training splits. The ID is not an account name, but voice and dictated words may themselves identify you. These takes currently have no automatic deletion schedule.</p>
+<p>After a Yiddish take, the app follows edits to that take&#x27;s text box. When the text is sent, the screen changes, another recording starts, or two minutes pass, it sends the corrected words or an outcome such as unchanged or deleted. Text cut to less than half is treated as deleted and is not sent as a correction. Words added to the take&#x27;s box may be included and are marked for review.</p>
+<p>You can turn off future training collection in Settings &gt; Yiddish training. This does not delete takes already sent. That row also lets you copy your recording ID for a deletion request. If the PC is unavailable, the recording uses the normal cloud model instead, through the free-minute server when applicable. A quick tap uses the normal cloud model without Yiddish training.</p>
+<h2>What stays on your phone</h2>
+<ul><li><strong>Your OpenRouter API key</strong>, stored in the app&#x27;s private storage.</li><li><strong>Your transcription history</strong>, stored in the app&#x27;s private storage. By default the app deletes entries after 24 hours. You can choose to keep them, and you can delete them at any time.</li></ul>
+<p>Uninstalling the app deletes both.</p>
+<h2>Accessibility service</h2>
+<p>Word for Word uses Android&#x27;s Accessibility service for two things:</p>
+<ul><li>Showing the floating dictation button while your keyboard is open.</li><li>Typing your dictated words into the text box you&#x27;re in.</li></ul>
+<p>To do this, the app looks at the focused text box and the text already in it, so it can add your words at the cursor and skip grey placeholder text. If you agree to Yiddish training, it also watches that take&#x27;s text box for edits and sends corrected words as described above. If you enable a keyboard shortcut, the service filters key events to detect your selected shortcut. The app does not collect other screen content for analytics. You can disable the service in Android&#x27;s Accessibility settings.</p>
+<h2>Usage data</h2>
+<p>To see how the app is used and where it fails, the app sends anonymous usage counts to <a href="https://posthog.com">PostHog</a>, an analytics service. You can turn this off in Settings with &quot;Share usage data&quot;.</p>
+<p>What it sends:</p>
+<ul><li>Events: the app opening or closing, a recording starting (by the on-screen button or the keyboard shortcut), a transcription working or failing (with the model name, the recording&#x27;s length in seconds, and the error code), and whether the text was typed, pasted, or only copied.</li><li>The app version and build, the Android version, and the phone&#x27;s maker and model.</li><li>A random ID made for this install, so counts can tell installs apart. It isn&#x27;t linked to your name, account, or phone number.</li></ul>
+<p>PostHog also sees the internet address the data comes from, as any web service does.</p>
+<p>PostHog never receives your recordings, your words, your transcription history, or your API key.</p>
+<h2>Data collection</h2>
+<p>Word for Word has no accounts, no ads, and no crash reporting. The developer&#x27;s services process free-minute recordings in transit and retain Yiddish takes and usage records as described above. Your own OpenRouter API key is not sent to the developer&#x27;s servers.</p>
+<p>Network services, including Cloudflare, OpenRouter, model providers, and PostHog, receive network metadata such as your internet address. Their terms and privacy policies also apply. Analytics retention depends on the hosted PostHog project; this app does not enforce a remote deletion schedule.</p>
+<h2>Retention and deletion requests</h2>
+<p>Deleting history or uninstalling removes local data, but does not delete Yiddish takes, server usage records, or analytics already sent. Turning off Share usage data stops future analytics collection by the app. Turning off Yiddish training stops future training uploads and pending corrections. Neither switch retracts completed transfers or reverses model training already performed.</p>
+<p>For a request about remote data, contact the developer through the issue link below and ask for a private contact method before sharing identifiers. For Yiddish takes, copy your recording ID from Settings &gt; Yiddish training before uninstalling. Do not post audio, dictated text, API keys, or identifiers in a public issue. Deletion requests are handled manually; the app has no automatic remote-deletion button. Providers may separately retain data under their own policies.</p>
+<h2>Open source</h2>
+<p>Word for Word is open source, based on <a href="https://github.com/kafkasl/phone-whisper">Phone Whisper</a>. You can read the code at <a href="https://github.com/isaacweber613/whisper-verbatim">github.com/isaacweber613/whisper-verbatim</a>.</p>
+<h2>Contact</h2>
+<p>For privacy questions, open an issue at <a href="https://github.com/isaacweber613/whisper-verbatim/issues">github.com/isaacweber613/whisper-verbatim/issues</a>.</p>
+</main>
 </html>

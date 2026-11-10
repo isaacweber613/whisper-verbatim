@@ -1,10 +1,14 @@
 # Privacy policy for Word for Word
 
+Last updated: November 10, 2026. Developer: Isaac Weber.
+
 Word for Word is an Android dictation app. You tap a floating button, speak, and the app types your exact words into the text box you're in.
 
 ## What happens to your recording
 
-When you tap the floating button, the app records audio from the microphone until you tap again. The app sends that recording directly from your phone to OpenRouter, using the OpenRouter API key you entered, to turn it into text. OpenRouter passes the audio to the speech-to-text model you picked in the app. In the Play Store build, if you have not entered a key, the recording goes to Word for Word's server (a Cloudflare Worker), which passes it to OpenRouter and counts your free minutes.
+After you agree to cloud dictation, tapping the floating button records audio until you tap again. With your own API key, the app sends the recording directly from your phone to OpenRouter. OpenRouter passes the audio to the speech-to-text model you picked. In the Play Store build, if you have not entered a key, the recording goes through Word for Word's server (a Cloudflare Worker), which passes it to OpenRouter. That server processes the recording in transit and does not store the recording or transcription in its database.
+
+For free minutes, the app also sends a SHA-256 hash of its Android device ID. The server stores that hash, the UTC calendar month, and seconds used in a Cloudflare D1 database to enforce the monthly allowance. The hash can stay the same after reinstalling the app. These records currently have no automatic deletion schedule.
 
 Outside the Yiddish mode below, the app doesn't send your audio or text anywhere else.
 
@@ -12,7 +16,11 @@ OpenRouter and the model provider handle your audio under their own terms and pr
 
 ## Yiddish takes
 
-When Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC, through a Cloudflare Worker. The recording and the model's text are kept on that PC to improve the Yiddish model. The app sends a random install id and the app version with the take, so takes from one phone can be grouped for training splits; it is not linked to your name. If the PC is off, the recording uses the normal cloud model instead.
+When Yiddish is selected, holding the mic button or using the Yiddish shortcut asks for separate training consent before the first recording. If you agree, that recording goes to a Yiddish speech model on the developer's PC through a Cloudflare Worker. The recording, model text, and your later corrected words are kept on that PC for review and training to improve the Yiddish model. The app sends a random install ID and app version so takes from one installation can be grouped for training splits. The ID is not an account name, but voice and dictated words may themselves identify you. These takes currently have no automatic deletion schedule.
+
+After a Yiddish take, the app follows edits to that take's text box. When the text is sent, the screen changes, another recording starts, or two minutes pass, it sends the corrected words or an outcome such as unchanged or deleted. Text cut to less than half is treated as deleted and is not sent as a correction. Words added to the take's box may be included and are marked for review.
+
+You can turn off future training collection in Settings > Yiddish training. This does not delete takes already sent. That row also lets you copy your recording ID for a deletion request. If the PC is unavailable, the recording uses the normal cloud model instead, through the free-minute server when applicable. A quick tap uses the normal cloud model without Yiddish training.
 
 ## What stays on your phone
 
@@ -28,7 +36,7 @@ Word for Word uses Android's Accessibility service for two things:
 - Showing the floating dictation button while your keyboard is open.
 - Typing your dictated words into the text box you're in.
 
-To do this, the app looks at the text box you're in and the text already in it, so it can add your words at the cursor and skip grey placeholder text. After a Yiddish take, it also watches that one text box for your edits, so it can send the corrected words back as the take's correct text. It looks only when you tap into a text box or tap the floating button. The app doesn't save, collect, or share anything else it reads on your screen.
+To do this, the app looks at the focused text box and the text already in it, so it can add your words at the cursor and skip grey placeholder text. If you agree to Yiddish training, it also watches that take's text box for edits and sends corrected words as described above. If you enable a keyboard shortcut, the service filters key events to detect your selected shortcut. The app does not collect other screen content for analytics. You can disable the service in Android's Accessibility settings.
 
 ## Usage data
 
@@ -46,7 +54,15 @@ PostHog never receives your recordings, your words, your transcription history, 
 
 ## Data collection
 
-Word for Word has no accounts, no ads, and no crash reporting. The developer doesn't receive your recordings, your text, or your API key, except for Yiddish takes described above.
+Word for Word has no accounts, no ads, and no crash reporting. The developer's services process free-minute recordings in transit and retain Yiddish takes and usage records as described above. Your own OpenRouter API key is not sent to the developer's servers.
+
+Network services, including Cloudflare, OpenRouter, model providers, and PostHog, receive network metadata such as your internet address. Their terms and privacy policies also apply. Analytics retention depends on the hosted PostHog project; this app does not enforce a remote deletion schedule.
+
+## Retention and deletion requests
+
+Deleting history or uninstalling removes local data, but does not delete Yiddish takes, server usage records, or analytics already sent. Turning off Share usage data stops future analytics collection by the app. Turning off Yiddish training stops future training uploads and pending corrections. Neither switch retracts completed transfers or reverses model training already performed.
+
+For a request about remote data, contact the developer through the issue link below and ask for a private contact method before sharing identifiers. For Yiddish takes, copy your recording ID from Settings > Yiddish training before uninstalling. Do not post audio, dictated text, API keys, or identifiers in a public issue. Deletion requests are handled manually; the app has no automatic remote-deletion button. Providers may separately retain data under their own policies.
 
 ## Open source
 
