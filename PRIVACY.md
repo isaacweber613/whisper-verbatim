@@ -1,6 +1,6 @@
 # Privacy policy for Word for Word
 
-Last updated: November 10, 2026. Developer: Isaac Weber.
+Last updated: November 11, 2026. Developer: Isaac Weber.
 
 Word for Word is an Android dictation app. You tap a floating button, speak, and the app types your exact words into the text box you're in.
 
@@ -9,6 +9,8 @@ Word for Word is an Android dictation app. You tap a floating button, speak, and
 After you agree to cloud dictation, tapping the floating button records audio until you tap again. With your own API key, the app sends the recording directly from your phone to OpenRouter. OpenRouter passes the audio to the speech-to-text model you picked. In the Play Store build, if you have not entered a key, the recording goes through Word for Word's server (a Cloudflare Worker), which passes it to OpenRouter. That server processes the recording in transit and does not store the recording or transcription in its database.
 
 For free minutes, the app also sends a SHA-256 hash of its Android device ID. The server stores that hash, the UTC calendar month, and seconds used in a Cloudflare D1 database to enforce the monthly allowance. The hash can stay the same after reinstalling the app. These records currently have no automatic deletion schedule.
+
+When you share an audio file to Word for Word from another app, the app converts it on your phone and sends it the same way as a recording. The text is copied to your clipboard and saved in History.
 
 Outside the Yiddish mode below, the app doesn't send your audio or text anywhere else.
 
@@ -19,6 +21,8 @@ OpenRouter and the model provider handle your audio under their own terms and pr
 When Yiddish is selected, holding the mic button or using the Yiddish shortcut asks for separate training consent before the first recording. If you agree, that recording goes to a Yiddish speech model on the developer's PC through a Cloudflare Worker. The recording, model text, and your later corrected words are kept on that PC for review and training to improve the Yiddish model. The app sends a random install ID and app version so takes from one installation can be grouped for training splits. The ID is not an account name, but voice and dictated words may themselves identify you. These takes currently have no automatic deletion schedule.
 
 After a Yiddish take, the app follows edits to that take's text box. When the text is sent, the screen changes, another recording starts, or two minutes pass, it sends the corrected words or an outcome such as unchanged or deleted. Text cut to less than half is treated as deleted and is not sent as a correction. Words added to the take's box may be included and are marked for review.
+
+With Yiddish selected, sharing an audio file asks if it is Yiddish. If you answer Yiddish, the file is sent, kept and used the same way as a Yiddish take, marked as a shared file. Nothing is typed into a text box, so no edits are followed.
 
 You can turn off future training collection in Settings > Yiddish training. This does not delete takes already sent. That row also lets you copy your recording ID for a deletion request. If the PC is unavailable, the recording uses the normal cloud model instead, through the free-minute server when applicable. A quick tap uses the normal cloud model without Yiddish training.
 

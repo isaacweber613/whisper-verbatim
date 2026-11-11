@@ -30,6 +30,20 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- Share an audio file to Word for Word to transcribe it (ShareActivity.kt). -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:theme="@style/Theme.PhoneWhisper.Share"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".WhisperAccessibilityService"
             android:exported="false"

@@ -74,6 +74,15 @@ emulator's keyboard device (`getevent -p` lists it; needs an AVD with `hw.keyboa
 Also, a UI-automation snapshot tool (such as agent-device `snapshot`) pauses accessibility
 services while connected; close its session before testing.
 
+## Sharing an audio file (Isaac, 2026-11-11)
+
+Any app can share an audio file to Word for Word (`ShareActivity.kt`, an `audio/*` share target).
+`AudioDecoder.kt` turns it into 16 kHz mono, it goes through the same cloud path as dictation
+(`CloudTranscription.kt`), and the text is copied to the clipboard and saved to History. With
+Yiddish picked it first asks "Is this recording in Yiddish?"; Yiddish sends it to the PC model
+with `x-client: app-share` (the voice is often someone else's) and outcome `not_tracked`. The
+whole file is decoded in memory and sent in one request, so a very long file can fail.
+
 ## Yiddish takes (Isaac, 2026-11-08)
 
 With Yiddish picked as the language, one recording at a time can go to the Yiddish model running

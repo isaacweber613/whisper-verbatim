@@ -769,10 +769,9 @@ class WhisperAccessibilityService : AccessibilityService() {
             if (!result.text.isNullOrBlank()) {
                 Analytics.track("transcribed", mapOf("model" to "yiddish-pc", "seconds" to seconds, "backup_model" to false, "free_minutes" to false))
                 handleTranscriptionResult(result.text, "yiddish-pc", id)
-            } else if (result.code == 503 || (result.code == null && result.error != null)) {
-                // Isaac (2026-11-08): when the PC with the Yiddish model is off, use the normal model (Auto).
+            } else if (YiddishServer.isOff(result)) {
                 yiddishTake = false
-                handler.post { showFeedback("The Yiddish model is off. Used your normal model.", 3000) }
+                handler.post { showFeedback(YiddishServer.OFF_NOTICE, 3000) }
                 transcribeApi(pcm)
             } else {
                 failTranscription(pcm, "yiddish-pc", result)
@@ -810,40 +809,13 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     private fun transcribeApi(pcm: ByteArray) {
-        val wav = WavWriter.encode(pcm)
-        val apiKey = prefs().getString("api_key", "") ?: ""
-        // The Play build with no key entered uses Word for Word's server and its free minutes.
-        val deviceId = if (FreeMinutes.inUse(this)) FreeMinutes.deviceId(this) else null
-        if (apiKey.isBlank() && deviceId == null) { failWithRetry(pcm, "Set your OpenRouter API key in the Word for Word app"); return }
-
-        // With free minutes, Word for Word picks the model; the picker is hidden.
-        val model = if (deviceId != null) TranscriberClient.DEFAULT_MODEL
-                    else prefs().getString("cloud_model", TranscriberClient.DEFAULT_MODEL) ?: TranscriberClient.DEFAULT_MODEL
-        val verbatim = prefs().getBoolean("verbatim", false)
-        // With Yiddish picked, Yiddish takes go to the Yiddish model; a normal take lets the model guess.
-        val language = (prefs().getString("language", "auto") ?: "auto").let { if (it == "yi") "auto" else it }
-        // Audio length to a tenth of a second (16 kHz, 16-bit mono = 32,000 bytes a second), for usage stats.
-        val seconds = Math.round(pcm.size / 3200.0) / 10.0
-        TranscriberClient.transcribe(wav, apiKey, model, verbatim, language, deviceId) { result ->
-            if (result.text != null && result.text.isNotBlank()) {
-                Analytics.track("transcribed", mapOf("model" to model, "seconds" to seconds, "backup_model" to false, "free_minutes" to (deviceId != null)))
-                handleTranscriptionResult(result.text, model)
-            } else if (TranscriberClient.shouldTryAnotherModel(result.code, result.detail)) {
-                // The chosen model is busy or down: send the same recording to another model right away.
-                val backup = TranscriberClient.fallbackFor(model)
-                Log.i(TAG, "$model failed (${result.code}), trying $backup")
-                TranscriberClient.transcribe(wav, apiKey, backup, verbatim, language, deviceId) { second ->
-                    Log.i(TAG, "$backup answered: ${if (!second.text.isNullOrBlank()) "text" else second.code?.let { "error $it" } ?: "no text"}")
-                    if (second.text != null && second.text.isNotBlank()) {
-                        Analytics.track("transcribed", mapOf("model" to backup, "seconds" to seconds, "backup_model" to true, "free_minutes" to (deviceId != null)))
-                        showFeedback("${TranscriberClient.titleFor(model)} was unavailable. Used ${TranscriberClient.titleFor(backup)}.", 4000)
-                        handleTranscriptionResult(second.text, backup)
-                    } else {
-                        failTranscription(pcm, model, if (second.error == null && second.text != null) second else result)
-                    }
-                }
+        if (!CloudTranscription.ready(this)) { failWithRetry(pcm, CloudTranscription.NO_KEY); return }
+        CloudTranscription.run(this, WavWriter.encode(pcm)) { o ->
+            if (o.text != null) {
+                o.notice?.let { showFeedback(it, 4000) }
+                handleTranscriptionResult(o.text, o.model)
             } else {
-                failTranscription(pcm, model, result)
+                failTranscription(pcm, o.model, o.failure!!)
             }
         }
     }
@@ -854,12 +826,7 @@ class WhisperAccessibilityService : AccessibilityService() {
      * Other failures (network, server) keep the recording for a retry.
      */
     private fun failTranscription(pcm: ByteArray, model: String, result: TranscriberClient.Result) {
-        val heardNothing = result.error == null && result.text != null
-        Analytics.track("transcription_failed", mapOf(
-            "model" to model,
-            "reason" to if (heardNothing) "no_words" else "error",
-            "http_code" to (result.code ?: 0)))
-        if (heardNothing) {
+        if (CloudTranscription.trackFailure(model, result)) {
             handler.post { reset(NO_WORDS) }
         } else {
             failWithRetry(pcm, result.error ?: NO_WORDS)

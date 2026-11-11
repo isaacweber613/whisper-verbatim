@@ -43,13 +43,23 @@ object YiddishServer {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** [callback] gets the result and the take's id on the PC (every Yiddish take is kept for training). */
-    fun transcribe(wav: ByteArray, appVersion: String, install: String,
+    /** Isaac (2026-11-08): when the PC with the Yiddish model is off, use the normal model (Auto). */
+    const val OFF_NOTICE = "The Yiddish model is off. Used your normal model."
+
+    /** True when the PC is off (the Worker answers 503) or the Worker can't be reached. */
+    fun isOff(result: TranscriberClient.Result) =
+        result.code == 503 || (result.code == null && result.error != null)
+
+    /**
+     * [callback] gets the result and the take's id on the PC (every Yiddish take is kept for training).
+     * [source] is saved with the take: "app" for dictation, "app-share" for an audio file shared to the app.
+     */
+    fun transcribe(wav: ByteArray, appVersion: String, install: String, source: String = "app",
                    callback: (TranscriberClient.Result, String?) -> Unit) {
         val request = Request.Builder()
             .url("$BASE/api/transcribe")
             .header("x-password", PASSWORD)
-            .header("x-client", "app")
+            .header("x-client", source)
             .header("x-app-version", appVersion)
             .header("x-install", install)
             .post(wav.toRequestBody("audio/wav".toMediaType()))
