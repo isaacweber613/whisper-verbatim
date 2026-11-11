@@ -8,18 +8,33 @@ import android.media.MediaFormat
 import android.net.Uri
 import android.os.Build
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.nio.ByteOrder
 
 /** Turns any audio file Android can play into the format recordings use: 16 kHz, 16-bit, mono PCM. */
 object AudioDecoder {
     const val RATE = 16000
 
-    /** Throws when the file has no audio or Android can't decode it. */
+    /** Throws when the file can't be opened, has no audio, or Android can't decode it. */
     fun decode(context: Context, uri: Uri): ByteArray {
+        // Copied into the app's cache first: some apps share a stream that can only be read once,
+        // front to back, and the decoder needs to jump around in the file.
+        val file = File.createTempFile("shared", null, context.cacheDir)
+        try {
+            context.contentResolver.openInputStream(uri)!!.use { input ->
+                file.outputStream().use { input.copyTo(it) }
+            }
+            return decode(file.path)
+        } finally {
+            file.delete()
+        }
+    }
+
+    private fun decode(path: String): ByteArray {
         val extractor = MediaExtractor()
         var started: MediaCodec? = null
         try {
-            extractor.setDataSource(context, uri, null)
+            extractor.setDataSource(path)
             val track = (0 until extractor.trackCount).first {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             }
