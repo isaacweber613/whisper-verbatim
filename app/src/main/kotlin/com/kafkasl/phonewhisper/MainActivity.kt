@@ -234,6 +234,14 @@ class MainActivity : AppCompatActivity() {
             refresh()
         })
 
+        // Google Play requires the privacy policy inside the app. Isaac (2026-11-11): Play build only.
+        if (BuildConfig.FLAVOR == "play") {
+            root.addView(settingsRow("Privacy policy", "How recordings, text and usage data are handled") {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(
+                    "https://isaacweber613.github.io/whisper-verbatim/privacy.html")))
+            })
+        }
+
         root.addView(settingsRow("Export settings", "Save all settings, including your API key, to a file") {
             exportLauncher.launch("word-for-word-settings.json")
         })
@@ -521,6 +529,8 @@ class MainActivity : AppCompatActivity() {
             .setMessage("This replaces all your current settings, including your API key.")
             .setPositiveButton("Import") { _, _ ->
                 SettingsBackup.apply(prefs(), values)
+                // Agreeing to Yiddish training belongs to this phone; it never arrives from a settings file.
+                prefs().edit().remove(YiddishServer.CONSENT).apply()
                 WhisperAccessibilityService.instance?.applyShortcutSettings()
                 refresh()
                 Toast.makeText(this, "Settings imported", Toast.LENGTH_SHORT).show()
@@ -539,9 +549,18 @@ class MainActivity : AppCompatActivity() {
         setupDialog = setupBuilder(1, "Accessibility")
             .setMessage(
                 "Word for Word uses Accessibility to show the mic button and type your words into the text box you're in. " +
-                "It reads only that text box, and never saves or shares it. " +
-                "If you turn on the keyboard shortcut, it also watches for that key press. " +
-                "Your recording goes only to OpenRouter, with your own key.")
+                // Google Play requires this text to say exactly what is read and where it goes. The
+                // Play build has free minutes and asks before Yiddish training, so its text differs.
+                (if (BuildConfig.FLAVOR == "play")
+                    "It reads the focused text box to insert words at the cursor. " +
+                    "If you separately agree to Yiddish training, it follows edits to the dictated text in that box " +
+                    "and sends the corrected words to the developer's PC through Cloudflare to improve the Yiddish model. " +
+                    "If you turn on the keyboard shortcut, it also watches for that key press. " +
+                    "It does not collect other screen content."
+                else
+                    "It reads only that text box, and never saves or shares it. " +
+                    "If you turn on the keyboard shortcut, it also watches for that key press. " +
+                    "Your recording goes only to OpenRouter, with your own key."))
             .setPositiveButton("Agree") { _, _ ->
                 prefs().edit().putBoolean("acc_disclosure_agreed", true).apply()
                 showAccessibilityStep()

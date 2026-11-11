@@ -35,7 +35,9 @@ class ShareActivity : AppCompatActivity() {
         if (YiddishServer.enabled(prefs())) {
             show(AlertDialog.Builder(this)
                 .setMessage("Is this recording in Yiddish?")
-                .setPositiveButton("Yiddish") { _, _ -> decode(uri, yiddish = true) }
+                .setPositiveButton("Yiddish") { _, _ ->
+                    if (YiddishServer.needsConsent(prefs())) askYiddishConsent(uri) else decode(uri, yiddish = true)
+                }
                 .setNegativeButton("Not Yiddish") { _, _ -> decode(uri, yiddish = false) })
         } else {
             decode(uri, yiddish = false)
@@ -45,6 +47,18 @@ class ShareActivity : AppCompatActivity() {
     override fun onDestroy() {
         dialog?.dismiss()
         super.onDestroy()
+    }
+
+    /** Play build only (see [YiddishServer.needsConsent]). "No thanks" still transcribes, with the normal model. */
+    private fun askYiddishConsent(uri: Uri) {
+        show(AlertDialog.Builder(this)
+            .setTitle("Yiddish training")
+            .setMessage(YiddishServer.DISCLOSURE)
+            .setPositiveButton("Agree") { _, _ ->
+                prefs().edit().putBoolean(YiddishServer.CONSENT, true).apply()
+                decode(uri, yiddish = true)
+            }
+            .setNegativeButton("No thanks") { _, _ -> decode(uri, yiddish = false) })
     }
 
     private fun decode(uri: Uri, yiddish: Boolean) {

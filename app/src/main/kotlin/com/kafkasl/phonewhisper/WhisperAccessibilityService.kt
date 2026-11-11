@@ -72,6 +72,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     private var failedPcm: ByteArray? = null
     /** The current (or failed) take goes to the Yiddish model; see [YiddishServer]. */
     private var yiddishTake = false
+    private var consentDialog: android.app.AlertDialog? = null
     /**
      * Isaac (2026-11-08): when someone edits the words a Yiddish take typed, the edited words go back
      * to the PC as that take's correct text. The box's text before and after the typed words is
@@ -341,6 +342,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        consentDialog?.dismiss()
         instance = null
         handler.post { onStateChanged?.invoke() }
         removeOverlay()
@@ -689,7 +691,27 @@ class WhisperAccessibilityService : AccessibilityService() {
         reset("Recording discarded")
     }
 
+    /** Play build only (see [YiddishServer.needsConsent]): shown before the microphone opens for the first Yiddish take. */
+    private fun askYiddishConsent(via: String) {
+        if (consentDialog?.isShowing == true) return
+        val dialog = android.app.AlertDialog.Builder(
+            android.view.ContextThemeWrapper(this, android.R.style.Theme_Material_Light_Dialog_Alert))
+            .setTitle("Yiddish training")
+            .setMessage(YiddishServer.DISCLOSURE)
+            .setPositiveButton("Agree") { _, _ ->
+                prefs().edit().putBoolean(YiddishServer.CONSENT, true).apply()
+                if (state == State.IDLE) startRecording(via, yiddish = true)
+            }
+            .setNegativeButton("No thanks", null)
+            .create()
+        dialog.window?.setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY)
+        dialog.setOnDismissListener { consentDialog = null }
+        consentDialog = dialog
+        dialog.show()
+    }
+
     private fun startRecording(via: String, yiddish: Boolean = false) {
+        if (yiddish && YiddishServer.needsConsent(prefs())) { askYiddishConsent(via); return }
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             toast("Microphone permission is off. Open Word for Word to turn it on."); return

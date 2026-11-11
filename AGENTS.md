@@ -51,6 +51,25 @@ the private upload key. The key is `~/.android/wordforword-upload.jks`; its pass
 `keystore.properties` in the repo root, which is never committed. Only the Play build uses that
 key; the GitHub builds keep the debug key. Every change still goes into all three builds.
 
+## What only the Play build shows (Isaac, 2026-11-11)
+
+Isaac: add consent dialogs, settings rows and policy links "only if it's really needed and if
+yes only to the Play Store version". Checked against Google's User Data and AccessibilityService
+policy pages that day, the Play build (`BuildConfig.FLAVOR == "play"`) has three things the
+GitHub builds don't:
+
+- A "Privacy policy" row in Settings. Play requires the policy inside the app.
+- A "Yiddish training" dialog with Agree / No thanks before the first Yiddish take or shared
+  Yiddish file (`YiddishServer.needsConsent`). Play requires a disclosure and an Agree tap before
+  data is kept in a way people don't expect; recordings and edits kept for training qualify.
+- An Accessibility disclosure that says the text box's edits can go to the PC and doesn't claim
+  recordings go only to OpenRouter with your own key (free minutes go through the server).
+
+Left out on purpose because the policy doesn't require them: a consent dialog for normal cloud
+dictation, and a settings row to turn Yiddish training off or copy an ID. Don't add them to any
+build unless Google rejects the app for it. An earlier draft with them is in
+`.dev/pending-consent-0.8.5.patch` (not committed).
+
 ## Free minutes server (Play build only)
 
 Isaac (2026-11-06): the Play build gives 30 free minutes a month per phone, so people can dictate

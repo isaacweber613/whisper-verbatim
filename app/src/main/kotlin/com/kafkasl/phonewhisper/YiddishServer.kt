@@ -27,6 +27,23 @@ object YiddishServer {
     fun enabled(p: SharedPreferences) =
         p.getString("language", "auto") == "yi"
 
+    /** Pref: the person agreed to [DISCLOSURE]. */
+    const val CONSENT = "yiddish_training_consent"
+    const val DISCLOSURE = "Yiddish mode sends your recording through Cloudflare to a speech model on the developer's PC. " +
+        "The PC keeps the recording, the text, and your later corrections to that text to improve the Yiddish model, " +
+        "with a random install ID and the app version. There is no automatic deletion. " +
+        "If the PC is unavailable, your recording goes to OpenRouter and its speech provider instead, " +
+        "through Word for Word's server when using free minutes. " +
+        "A quick tap uses the normal cloud model without Yiddish training."
+
+    /**
+     * Google Play requires an in-app disclosure and an Agree tap before data is kept in a way
+     * people don't expect, so the Play build asks once before the first Yiddish recording.
+     * Isaac (2026-11-11): only what Play requires, and only in the Play build. The GitHub builds
+     * don't ask, and there is no cloud-dictation question or settings row in any build.
+     */
+    fun needsConsent(p: SharedPreferences) = BuildConfig.FLAVOR == "play" && !p.getBoolean(CONSENT, false)
+
     /**
      * A random id for this install, for voice-disjoint training splits. It is not linked to the
      * person and is not the Android device id.
