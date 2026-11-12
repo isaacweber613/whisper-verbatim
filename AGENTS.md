@@ -100,7 +100,9 @@ Any app can share an audio file to Word for Word (`ShareActivity.kt`, an `audio/
 (`CloudTranscription.kt`), and the text is copied to the clipboard and saved to History. With
 Yiddish picked it first asks "Is this recording in Yiddish?"; Yiddish sends it to the PC model
 with `x-client: app-share` (the voice is often someone else's) and outcome `not_tracked`. The
-whole file is decoded in memory and sent in one request, so a very long file can fail.
+file is decoded into a cache file and sent in pieces of about 5 minutes, cut at a quiet moment
+(`AudioSplitter`), because OpenRouter rejects a request over 25 MB (about 13 minutes of WAV).
+A Yiddish file is one take on the PC per piece.
 
 ## Yiddish takes (Isaac, 2026-11-08)
 

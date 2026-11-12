@@ -39,7 +39,7 @@ Both run on Android 6 and newer. The app walks you through the microphone, the a
 - **Keyboard shortcut** for phones with a physical keypad: set any key or key combination and how long to
   press it.
 - **Share an audio file to Word for Word** (a voice note, a recording) from any app's share menu. It is
-  transcribed, copied to the clipboard and saved in history.
+  transcribed, copied to the clipboard and saved in history. A long file is sent in pieces of about 5 minutes.
 - **History**: transcriptions are kept for 24 hours, or forever if you turn that on. Tap one to copy it.
 - **Clear errors on screen** next to the mic button (no key, wrong key, no internet, out of credit,
   microphone busy, nothing heard). The app checks your key with OpenRouter when you save it.
