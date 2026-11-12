@@ -1,0 +1,3 @@
+Share an audio file to Word for Word to transcribe it and copy the text.
+Word for Word now asks before the first Yiddish recording, which the developer's PC keeps to improve the Yiddish model.
+The privacy policy is in Settings.
