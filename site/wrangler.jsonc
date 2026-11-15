@@ -1,0 +1,14 @@
+// The app's web page at https://nuchemweber.com/wordforword (Isaac, 2026-11-14: the website for the
+// Play Console). A Worker with only static files: it serves docs/, the same files as GitHub Pages.
+// Deploy: cd site && ../server/node_modules/.bin/wrangler deploy
+{
+  "name": "word-for-word-site",
+  "compatibility_date": "2026-11-01",
+  // Only this path of the domain. The rest of nuchemweber.com stays free.
+  "routes": [{ "pattern": "nuchemweber.com/wordforword*", "zone_name": "nuchemweber.com" }],
+  "assets": {
+    "directory": "../docs",
+    "base_path": "/wordforword",
+    "html_handling": "auto-trailing-slash"
+  }
+}
