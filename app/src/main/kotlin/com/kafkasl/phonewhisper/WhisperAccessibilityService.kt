@@ -304,7 +304,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         return m.blocks(event.keyCode)
     }
 
-    // --- Show the button only while the keyboard is open ---
+    // --- Show the button only while the keyboard is open or a text box has the cursor ---
 
     private val updateVisibility = Runnable { applyVisibility() }
 
@@ -320,6 +320,18 @@ class WhisperAccessibilityService : AccessibilityService() {
         false
     }
 
+    /** True when a text box has the cursor even though the keyboard is closed (you closed it with Back). */
+    private fun textBoxFocused(): Boolean = try {
+        val root = rootInActiveWindow
+        val node = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val editable = node?.isEditable == true
+        node?.recycle()
+        root?.recycle()
+        editable
+    } catch (e: Exception) {
+        false
+    }
+
     private fun applyVisibility() {
         val overlay = overlayView ?: return
         val params = layoutParams ?: return
@@ -327,7 +339,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         // With the keyboard shortcut on, the button shows only while you talk, not with the keyboard.
         val busy = state == State.RECORDING || state == State.TRANSCRIBING
         val show = if (shortcut != null) busy || state == State.RETRY || showingPasteFailure
-                   else busy || keyboardVisible()
+                   else busy || keyboardVisible() || textBoxFocused()
         val wasShown = overlay.visibility == View.VISIBLE
         if (show == wasShown) return
         overlay.visibility = if (show) View.VISIBLE else View.GONE
