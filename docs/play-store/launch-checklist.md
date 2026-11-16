@@ -8,7 +8,8 @@ Agreed scope, November 10, 2026: prepare launch assets and forms, publish the pr
 - [x] Account made and $25 paid; ID uploaded and website https://nuchemweber.com/wordforword/ verified (2026-11-14).
 - [x] WordForWordPlay.aab built from 0.8.6 (versionCode 33) with play-bundle.sh, 2026-11-15. Two phone screenshots in docs/play-store/screenshots/ (emulator, cropped to Play's 2:1 limit).
 - [x] Device check done in the Play Console app (2026-11-15).
-- [ ] Verify the contact phone number after Google approves the ID.
+- [x] ID approved and contact phone verified (2026-11-16). After entering the text code, press Save changes or it is lost.
+- [ ] App ID com.isaacweber.wordforword: Create app said "already in use" because the GitHub builds have installs. Registered it under Android developer verification with the GitHub signing key (the PC debug key, SHA-256 90:79:A6:...:BE:1A) and a proof APK: a release build with assets/adi-registration.properties holding the console snippet, signed with that key. In review since 2026-11-16 (up to 48 hours, email when done). Then create the app with that ID.
 - Trader status: Non-trader (Isaac, 2026-11-15: "nobody is allowed to see my address"). Google lets a non-trader charge only if the app is not offered in the EEA or the UK at all, so exclude those countries before any paid feature. A trader's phone number and address are shown to everyone from March 1, 2027.
 - [x] Fix inaccurate in-app Accessibility disclosure (Play build, 2026-11-11). Keep its consent separate from other sensitive-data disclosures.
 - [x] (Play build, 2026-11-11; Isaac: only what Play requires, so no cloud-dictation dialog and no settings row) Add informed consent before the optional Yiddish route uploads and retains recordings and corrected text for training.
