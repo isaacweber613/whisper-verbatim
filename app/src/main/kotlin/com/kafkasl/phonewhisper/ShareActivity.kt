@@ -117,20 +117,21 @@ class ShareActivity : AppCompatActivity() {
         val wav = WavWriter.encode(piece)
         if (!yiddish) { sendCloud(piece, wav); return }
         val install = YiddishServer.installId(this)
-        YiddishServer.transcribe(wav, BuildConfig.VERSION_NAME, install, "app-share") { result, id ->
-            if (!result.text.isNullOrBlank()) {
-                Analytics.track("transcribed", mapOf("model" to "yiddish-pc",
-                    "seconds" to Math.round(piece.size / 3200.0) / 10.0, "backup_model" to false, "free_minutes" to false))
-                // Nothing is typed into a text box, so there are no edits to follow.
-                id?.let { YiddishServer.sendCorrection(it, null, "not_tracked", BuildConfig.VERSION_NAME, install, false) }
-                ui { pieceDone(piece, result.text, "yiddish-pc") }
-            } else if (YiddishServer.isOff(result)) {
-                yiddish = false
-                notice = YiddishServer.OFF_NOTICE
-                sendCloud(piece, wav)
-            } else {
-                pieceFailed(piece, "yiddish-pc", result)
-            }
+        val (result, id) = YiddishServer.transcribeJob(wav, BuildConfig.VERSION_NAME, install, "app-share") { f ->
+            ui { showProgress(done + (f * piece.size).toLong()) }
+        }
+        if (!result.text.isNullOrBlank()) {
+            Analytics.track("transcribed", mapOf("model" to "yiddish-pc",
+                "seconds" to Math.round(piece.size / 3200.0) / 10.0, "backup_model" to false, "free_minutes" to false))
+            // Nothing is typed into a text box, so there are no edits to follow.
+            id?.let { YiddishServer.sendCorrection(it, null, "not_tracked", BuildConfig.VERSION_NAME, install, false) }
+            ui { pieceDone(piece, result.text, "yiddish-pc") }
+        } else if (YiddishServer.isOff(result)) {
+            yiddish = false
+            notice = YiddishServer.OFF_NOTICE
+            sendCloud(piece, wav)
+        } else {
+            pieceFailed(piece, "yiddish-pc", result)
         }
     }
 
@@ -190,10 +191,13 @@ class ShareActivity : AppCompatActivity() {
         show(b, close)
     }
 
-    /** After the first piece of a long file it also says how far along it is. */
-    private fun showProgress() {
+    /**
+     * Once [at] bytes of the file are typed out (after a piece, or as the Yiddish model reports it)
+     * it also says how far along it is.
+     */
+    private fun showProgress(at: Long = done) {
         val total = pcm?.length() ?: 0L
-        val label = if (done > 0 && total > 0) "Transcribing... ${done * 100 / total}%" else "Transcribing..."
+        val label = if (at > 0 && total > 0) "Transcribing... ${at * 100 / total}%" else "Transcribing..."
         progress?.let { it.text = label; return }
         val pad = (24 * resources.displayMetrics.density).toInt()
         val labelView = TextView(this).apply {

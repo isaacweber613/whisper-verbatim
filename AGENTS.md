@@ -98,6 +98,9 @@ services while connected; close its session before testing.
 Any app can share an audio file to Word for Word (`ShareActivity.kt`, an `audio/*` share target).
 Since Isaac's 2026-11-17 ask it also takes `video/*`: only the video's sound track is decoded. The
 file is read in place and copied into the cache only when it can't be read that way.
+A shared Yiddish file goes to the PC as a job (`/api/job`, then `/api/job/status` every 3 s,
+`YiddishServer.transcribeJob`), because Cloudflare drops a request with no answer for 125 s and a
+62-second video once took the PC 150 s (Isaac, 2026-11-17).
 `AudioDecoder.kt` turns it into 16 kHz mono, it goes through the same cloud path as dictation
 (`CloudTranscription.kt`), and the text is copied to the clipboard and saved to History. With
 Yiddish picked it first asks "Is this recording in Yiddish?"; Yiddish sends it to the PC model

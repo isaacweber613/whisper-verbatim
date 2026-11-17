@@ -82,9 +82,7 @@ object YiddishServer {
             .post(wav.toRequestBody("audio/wav".toMediaType()))
             .build()
         client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = callback(TranscriberClient.Result(null,
-                if (e is java.net.UnknownHostException) "No internet connection. Your words weren't sent."
-                else "Couldn't reach the Yiddish model. Try again."), null)
+            override fun onFailure(call: Call, e: IOException) = callback(offline(e), null)
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
@@ -92,14 +90,76 @@ object YiddishServer {
                 if (response.isSuccessful && json != null) {
                     callback(TranscriberClient.Result(json.optString("text", ""), null), json.optString("id").ifBlank { null })
                 } else {
-                    val msg = when (response.code) {
-                        503 -> "The Yiddish model is offline right now (the computer running it is off)."
-                        else -> "The Yiddish model had a problem (${json?.optString("error")?.takeIf { it.isNotBlank() } ?: response.code}). Try again."
-                    }
-                    callback(TranscriberClient.Result(null, msg, response.code), null)
+                    callback(failure(response.code, json), null)
                 }
             }
         })
+    }
+
+    /**
+     * A shared file (Isaac, 2026-11-17): a 62-second video took the PC 150 s, and Cloudflare drops
+     * a request that gets no answer for 125 s, so the take was typed out but the text never came
+     * back. Like the try page, a shared file starts a job on the PC (POST /api/job) and asks for it
+     * every 3 s (POST /api/job/status), or 5 s after a failed ask. Blocks; call it off the main
+     * thread. [progress] gets how much of the file is typed out, 0 to 1, when the PC says.
+     */
+    fun transcribeJob(wav: ByteArray, appVersion: String, install: String, source: String,
+                      progress: (Double) -> Unit): Pair<TranscriberClient.Result, String?> {
+        val start = Request.Builder()
+            .url("$BASE/api/job")
+            .header("x-password", PASSWORD)
+            .header("x-client", source)
+            .header("x-app-version", appVersion)
+            .header("x-install", install)
+            .post(wav.toRequestBody("audio/wav".toMediaType()))
+            .build()
+        val job = try {
+            client.newCall(start).execute().use { response ->
+                val json = try { JSONObject(response.body?.string() ?: "") } catch (_: Exception) { null }
+                json?.optString("job")?.takeIf { response.isSuccessful && it.isNotBlank() }
+                    ?: return failure(response.code, json) to null
+            }
+        } catch (e: IOException) {
+            return offline(e) to null
+        }
+        var wait = 3000L
+        while (true) {
+            Thread.sleep(wait)
+            val ask = Request.Builder()
+                .url("$BASE/api/job/status")
+                .header("x-password", PASSWORD)
+                .post(JSONObject().put("job", job).toString().toRequestBody("application/json".toMediaType()))
+                .build()
+            val json = try {
+                client.newCall(ask).execute().use { response ->
+                    val json = try { JSONObject(response.body?.string() ?: "") } catch (_: Exception) { null }
+                    if (!response.isSuccessful || json == null) return failure(response.code, json) to null
+                    json
+                }
+            } catch (_: IOException) {
+                wait = 5000L
+                continue
+            }
+            wait = 3000L
+            if (!json.optBoolean("done")) {
+                if (json.has("progress")) progress(json.optDouble("progress"))
+                continue
+            }
+            if (json.optString("error").isNotBlank()) return failure(500, json) to null
+            return TranscriberClient.Result(json.optString("text", ""), null) to json.optString("id").ifBlank { null }
+        }
+    }
+
+    private fun offline(e: IOException) = TranscriberClient.Result(null,
+        if (e is java.net.UnknownHostException) "No internet connection. Your words weren't sent."
+        else "Couldn't reach the Yiddish model. Try again.")
+
+    private fun failure(code: Int, json: JSONObject?): TranscriberClient.Result {
+        val msg = when (code) {
+            503 -> "The Yiddish model is offline right now (the computer running it is off)."
+            else -> "The Yiddish model had a problem (${json?.optString("error")?.takeIf { it.isNotBlank() } ?: code}). Try again."
+        }
+        return TranscriberClient.Result(null, msg, code)
     }
 
     /**
