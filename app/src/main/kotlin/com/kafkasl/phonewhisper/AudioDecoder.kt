@@ -7,12 +7,16 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import java.io.File
 import java.io.OutputStream
 import java.io.RandomAccessFile
 import java.nio.ByteOrder
 
-/** Turns any audio file Android can play into the format recordings use: 16 kHz, 16-bit, mono PCM. */
+/**
+ * Turns any audio or video file Android can play into the format recordings use: 16 kHz, 16-bit,
+ * mono PCM. A video's picture is never decoded; only its sound track is read.
+ */
 object AudioDecoder {
     const val RATE = 16000
 
@@ -21,24 +25,42 @@ object AudioDecoder {
      * Throws when the shared file can't be opened, has no audio, or Android can't decode it.
      */
     fun decode(context: Context, uri: Uri, pcm: File) {
-        // Copied into the app's cache first: some apps share a stream that can only be read once,
-        // front to back, and the decoder needs to jump around in the file.
+        // Read in place first, so a big video isn't copied. Some apps share a stream that can only
+        // be read once, front to back, and the decoder needs to jump around in the file; only then
+        // is it copied into the app's cache.
+        try {
+            decode(pcm) { it.setDataSource(context, uri, null) }
+            return
+        } catch (e: Exception) {
+            Log.i("PhoneWhisper", "Reading the shared file in place failed, copying it", e)
+        }
         val file = File.createTempFile("shared", null, context.cacheDir)
         try {
             context.contentResolver.openInputStream(uri)!!.use { input ->
                 file.outputStream().use { input.copyTo(it) }
             }
-            pcm.outputStream().buffered().use { decode(file.path, it) }
+            decode(pcm) { it.setDataSource(file.path) }
         } finally {
             file.delete()
         }
     }
 
-    private fun decode(path: String, out: OutputStream) {
+    /** Reads the file [open] points the extractor at and writes its sound to [pcm]. */
+    private fun decode(pcm: File, open: (MediaExtractor) -> Unit) {
         val extractor = MediaExtractor()
+        try {
+            open(extractor)
+        } catch (e: Exception) {
+            extractor.release()
+            throw e
+        }
+        pcm.outputStream().buffered().use { decode(extractor, it) }
+    }
+
+    /** Decodes the first sound track of [extractor] into [out] and releases it. */
+    private fun decode(extractor: MediaExtractor, out: OutputStream) {
         var started: MediaCodec? = null
         try {
-            extractor.setDataSource(path)
             val track = (0 until extractor.trackCount).first {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
             }

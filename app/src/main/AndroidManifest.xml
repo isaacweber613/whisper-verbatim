@@ -38,7 +38,7 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Share an audio file to Word for Word to transcribe it (ShareActivity.kt). -->
+        <!-- Share an audio or video file to Word for Word to transcribe it (ShareActivity.kt). -->
         <activity
             android:name=".ShareActivity"
             android:exported="true"
@@ -49,6 +49,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="audio/*" />
                 <data android:mimeType="application/ogg" />
+                <data android:mimeType="video/*" />
             </intent-filter>
         </activity>
 

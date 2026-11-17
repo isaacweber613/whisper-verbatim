@@ -96,6 +96,8 @@ services while connected; close its session before testing.
 ## Sharing an audio file (Isaac, 2026-11-11)
 
 Any app can share an audio file to Word for Word (`ShareActivity.kt`, an `audio/*` share target).
+Since Isaac's 2026-11-17 ask it also takes `video/*`: only the video's sound track is decoded. The
+file is read in place and copied into the cache only when it can't be read that way.
 `AudioDecoder.kt` turns it into 16 kHz mono, it goes through the same cloud path as dictation
 (`CloudTranscription.kt`), and the text is copied to the clipboard and saved to History. With
 Yiddish picked it first asks "Is this recording in Yiddish?"; Yiddish sends it to the PC model

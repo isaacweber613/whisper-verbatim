@@ -25,7 +25,8 @@ import kotlin.concurrent.thread
  * History. With Yiddish picked as the language it first asks if the file is Yiddish; yes sends it
  * to the Yiddish model on Isaac's PC like a Yiddish take, marked "app-share" there because the
  * voice in a shared file is often someone else's. A long file is sent in pieces of about 5
- * minutes, one after another (see [AudioSplitter]).
+ * minutes, one after another (see [AudioSplitter]). Isaac (2026-11-17): a shared video works the
+ * same way; only its sound is read.
  */
 class ShareActivity : AppCompatActivity() {
     private var dialog: AlertDialog? = null
@@ -227,6 +228,6 @@ class ShareActivity : AppCompatActivity() {
     private companion object {
         const val TAG = "PhoneWhisper"
         const val NO_WORDS = "No words came back from this file."
-        const val NOT_AUDIO = "Couldn't read this file as audio."
+        const val NOT_AUDIO = "Couldn't read the sound in this file."
     }
 }

@@ -10,7 +10,7 @@ Tapping the floating button records audio until you tap again. With your own API
 
 For free minutes, the app also sends a SHA-256 hash of its Android device ID. The server stores that hash, the UTC calendar month, and seconds used in a Cloudflare D1 database to enforce the monthly allowance. The hash can stay the same after reinstalling the app. These records currently have no automatic deletion schedule.
 
-When you share an audio file to Word for Word from another app, the app converts it on your phone and sends it the same way as a recording. The text is copied to your clipboard and saved in History.
+When you share an audio or video file to Word for Word from another app, the app takes its sound on your phone and sends it the same way as a recording. The text is copied to your clipboard and saved in History.
 
 Outside the Yiddish mode below, the app doesn't send your audio or text anywhere else.
 
@@ -22,7 +22,7 @@ When Yiddish is selected, holding the mic button or using the Yiddish shortcut s
 
 After a Yiddish take, the app follows edits to that take's text box. When the text is sent, the screen changes, another recording starts, or two minutes pass, it sends the corrected words or an outcome such as unchanged or deleted. Text cut to less than half is treated as deleted and is not sent as a correction. Words added to the take's box may be included and are marked for review.
 
-With Yiddish selected, sharing an audio file asks if it is Yiddish. If you answer Yiddish, the file is sent, kept and used the same way as a Yiddish take, marked as a shared file. Nothing is typed into a text box, so no edits are followed.
+With Yiddish selected, sharing an audio or video file asks if it is Yiddish. If you answer Yiddish, the file is sent, kept and used the same way as a Yiddish take, marked as a shared file. Nothing is typed into a text box, so no edits are followed.
 
 To stop sending recordings for training, use a quick tap or the normal shortcut, or pick another language. This does not delete takes already sent. If the PC is unavailable, the recording uses the normal cloud model instead, through the free-minute server when applicable. A quick tap uses the normal cloud model without Yiddish training.
 
