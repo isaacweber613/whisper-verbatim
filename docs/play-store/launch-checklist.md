@@ -19,7 +19,15 @@ Agreed scope, November 10, 2026: prepare launch assets and forms, publish the pr
 - [x] (built 2026-11-11 at 0.8.5, versionCode 32; rebuild after any later source change) Build the latest source with `scripts/play-bundle.sh`; verify upload signature, package, version and manifest. Upload `WordForWordPlay.aab`, never either GitHub APK.
 - [ ] Check signed release manifest has no `REQUEST_INSTALL_PACKAGES` or debug-only exported receiver and no external update flow.
 - [ ] Capture final app screenshots and disclosure/use video. Finish Play icon and feature graphic.
-- [ ] Supply support email and confirm countries, pricing, audience, ads, content rating, app access and Data safety answers.
+- [x] App content forms saved 2026-11-17 (Isaac: "Fill it in"), all 10 done. Countries still open (Free app; exclude EEA/UK before any paid feature while Non-trader).
+  - Privacy policy: https://nuchemweber.com/wordforword/privacy. Ads: none. Sign in details: nothing restricted.
+  - Content rating (IARC, All Other App Types, contact micromaxpro7@gmail.com): all No; result Everyone / PEGI 3 / USK 0 / 3+.
+  - Target age: 13-15, 16-17, 18 and over. Advertising ID: No (no AD_ID in the merged Play manifest). Government: No. Financial: none. Health: none.
+  - Data safety: collects data, encrypted in transit (all endpoints HTTPS), no accounts, deletion requests via the privacy page. Nothing marked shared: OpenRouter, model providers, PostHog and Cloudflare treated as service providers. Collected, none ephemeral:
+    approximate location (PostHog GeoIP from the IP; optional; analytics), voice recordings (required; app functionality),
+    diagnostics and app interactions (optional; analytics), other user-generated content (Yiddish corrections; optional; app functionality),
+    device or other IDs (required, the free-minute hash; app functionality and analytics).
+  - Store settings: category Productivity; contact micromaxpro7@gmail.com, website https://nuchemweber.com/wordforword/, no phone.
 - [ ] Isaac reviews the concrete legal answers before they are submitted.
 
 ## Testing and production
