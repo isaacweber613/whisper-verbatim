@@ -428,29 +428,33 @@ class WhisperAccessibilityService : AccessibilityService() {
     // --- Overlay ---
 
     private fun showOverlay() {
+        // A service's default theme counts as light, so Android's dark theme ("Expanded" on Pixel)
+        // flipped the see-through button to light grey with a black mic (Isaac, 2026-11-16).
+        // A dark theme and no force dark keep the colors as set.
+        val ui = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault)
         val wm = getSystemService(WINDOW_SERVICE) as WindowManager
         val buttonSize = (BTN_DP * dp).toInt()
         val ringSize = (RING_DP * dp).toInt()
         val pad = (PAD_DP * dp).toInt()
         val margin = (MARGIN_DP * dp).toInt()
 
-        val ring = ProgressBar(this).apply {
+        val ring = ProgressBar(ui).apply {
             isIndeterminate = true
             indeterminateTintList = ColorStateList.valueOf(COLOR_RING)
             visibility = View.GONE
         }
 
-        val img = ImageView(this).apply {
+        val img = ImageView(ui).apply {
             setImageResource(R.drawable.ic_mic)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
             setPadding(pad, pad, pad, pad)
             background = circle(COLOR_IDLE)
         }
 
-        val levelBars = LevelBarsView(this).apply { visibility = View.GONE }
+        val levelBars = LevelBarsView(ui).apply { visibility = View.GONE }
         val barsSize = (buttonSize * 0.6f).toInt()
 
-        val overlay = FrameLayout(this).apply {
+        val overlay = FrameLayout(ui).apply {
             addView(ring, FrameLayout.LayoutParams(ringSize, ringSize, Gravity.CENTER))
             addView(img, FrameLayout.LayoutParams(buttonSize, buttonSize, Gravity.CENTER))
             addView(levelBars, FrameLayout.LayoutParams(barsSize, barsSize, Gravity.CENTER))
@@ -470,7 +474,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         // The X at the bottom center that appears while you drag; dropping the button on it hides it
         // in that app until the keyboard opens (Isaac, 2026-11-16).
         val targetSize = (HIDE_TARGET_DP * dp).toInt()
-        val hideTarget = TextView(this).apply {
+        val hideTarget = TextView(ui).apply {
             text = "✕"
             textSize = 28f
             gravity = Gravity.CENTER
@@ -598,7 +602,7 @@ class WhisperAccessibilityService : AccessibilityService() {
             }
         }
 
-        val feedback = TextView(this).apply {
+        val feedback = TextView(ui).apply {
             textSize = 13f
             setTextColor(0xFFFFFFFF.toInt())
             setPadding((12 * dp).toInt(), (8 * dp).toInt(), (12 * dp).toInt(), (8 * dp).toInt())
@@ -619,6 +623,9 @@ class WhisperAccessibilityService : AccessibilityService() {
         }
         positionFeedback(feedbackParams, params)
 
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            for (view in listOf(hideTarget, overlay, feedback)) view.isForceDarkAllowed = false
+        }
         // Added first so the button is drawn above the X while you drag it there.
         wm.addView(hideTarget, targetParams)
         wm.addView(overlay, params)
