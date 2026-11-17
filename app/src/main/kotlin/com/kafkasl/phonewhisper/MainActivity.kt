@@ -39,6 +39,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var keepRunningRow: LinearLayout
     private lateinit var vibrateSwitch: MaterialSwitch
     private lateinit var analyticsSwitch: MaterialSwitch
+    private lateinit var cursorSwitch: MaterialSwitch
+    private lateinit var hiddenAppsRow: LinearLayout
+    private lateinit var hiddenAppsRowSub: TextView
 
     // Export and import of all settings, including the API key (SettingsBackup.kt).
     private val exportLauncher = registerForActivityResult(
@@ -226,6 +229,20 @@ class MainActivity : AppCompatActivity() {
             prefs().edit().putBoolean("vibrate", !prefs().getBoolean("vibrate", true)).apply()
             refresh()
         })
+
+        // Isaac (2026-11-16): turn off showing the button for the cursor alone, or bring it back in
+        // apps where it was dropped on the X.
+        cursorSwitch = MaterialSwitch(this).apply { isClickable = false }
+        root.addView(settingsRow("Show when a text box has the cursor",
+            "Off: only while the keyboard is open. To hide it in one app, drag it to the X at the bottom", cursorSwitch) {
+            val p = prefs()
+            p.edit().putBoolean(WhisperAccessibilityService.PREF_SHOW_WITH_CURSOR,
+                !p.getBoolean(WhisperAccessibilityService.PREF_SHOW_WITH_CURSOR, true)).apply()
+            refresh()
+        })
+        hiddenAppsRow = settingsRow("Hidden in these apps", "") { pickHiddenApps() }
+        hiddenAppsRowSub = hiddenAppsRow.findViewWithTag("subtitle")
+        root.addView(hiddenAppsRow)
 
         analyticsSwitch = MaterialSwitch(this).apply { isClickable = false }
         root.addView(settingsRow("Share usage data",
@@ -810,6 +827,12 @@ class MainActivity : AppCompatActivity() {
         
         vibrateSwitch.isChecked = prefs().getBoolean("vibrate", true)
         analyticsSwitch.isChecked = Analytics.enabled(this)
+        val cursorOn = prefs().getBoolean(WhisperAccessibilityService.PREF_SHOW_WITH_CURSOR, true)
+        val hiddenApps = prefs().getStringSet(WhisperAccessibilityService.PREF_CURSOR_HIDDEN_APPS, emptySet())!!
+        cursorSwitch.isChecked = cursorOn
+        // With the keyboard shortcut on, the button shows only while you talk, so neither applies.
+        hiddenAppsRow.visibility = if (cursorOn && !shortcutOn && hiddenApps.isNotEmpty()) View.VISIBLE else View.GONE
+        hiddenAppsRowSub.text = hiddenApps.map { appLabel(it) }.sorted().joinToString(", ") + ". Tap to bring it back"
 
         shortcutSwitch.isChecked = shortcutOn
         shortcutRowSub.text = if (shortcutOn) "On. The mic button shows only while you talk" else "Off"
@@ -828,6 +851,29 @@ class MainActivity : AppCompatActivity() {
 
         refreshAllCards()
         refreshPromptRows()
+    }
+
+    private fun appLabel(pkg: String): String = try {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+    } catch (e: Exception) {
+        pkg
+    }
+
+    /** Lists the apps where the button was dropped on the X; unticking one brings the button back there. */
+    private fun pickHiddenApps() {
+        val key = WhisperAccessibilityService.PREF_CURSOR_HIDDEN_APPS
+        val apps = prefs().getStringSet(key, emptySet())!!.sortedBy { appLabel(it).lowercase() }
+        if (apps.isEmpty()) return
+        val keep = BooleanArray(apps.size) { true }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Hidden while the keyboard is closed")
+            .setMultiChoiceItems(apps.map { appLabel(it) }.toTypedArray(), keep) { _, i, checked -> keep[i] = checked }
+            .setPositiveButton("Save") { _, _ ->
+                prefs().edit().putStringSet(key, apps.filterIndexed { i, _ -> keep[i] }.toSet()).apply()
+                refresh()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // --- Keyboard shortcut ---

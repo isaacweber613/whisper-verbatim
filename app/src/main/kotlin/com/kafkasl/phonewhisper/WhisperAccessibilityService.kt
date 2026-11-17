@@ -47,7 +47,17 @@ class WhisperAccessibilityService : AccessibilityService() {
         private const val RING_DP = 56
         private const val FEEDBACK_OFFSET_DP = 64
 
-        private const val COLOR_IDLE = 0xDD1C1C1E.toInt()
+        // Isaac (2026-11-16): the idle button a bit more see-through (was 0xDD, 87%; now 0xAA, 67%).
+        private const val COLOR_IDLE = 0xAA1C1C1E.toInt()
+        private const val COLOR_HIDE_TARGET = 0xAA1C1C1E.toInt()
+        private const val COLOR_HIDE_TARGET_ON = 0xEE1C1C1E.toInt()
+        private const val HIDE_TARGET_DP = 56
+        private const val HIDE_TARGET_BOTTOM_DP = 48
+
+        /** Setting: show the button when a text box has the cursor, not only with the keyboard open. */
+        const val PREF_SHOW_WITH_CURSOR = "show_with_cursor"
+        /** Apps where the button shows only with the keyboard open (dropped on the X there). */
+        const val PREF_CURSOR_HIDDEN_APPS = "cursor_hidden_apps"
         private const val COLOR_RECORDING = 0xDD4F46E5.toInt()
         private const val COLOR_BUSY = 0xDD6B6B6B.toInt()
         private const val COLOR_RETRY = 0xDDF59E0B.toInt()
@@ -188,6 +198,7 @@ class WhisperAccessibilityService : AccessibilityService() {
     private var bars: LevelBarsView? = null
     private var spinner: ProgressBar? = null
     private var feedbackView: TextView? = null
+    private var hideTargetView: TextView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var feedbackLayoutParams: WindowManager.LayoutParams? = null
     private var audioRecord: AudioRecord? = null
@@ -320,16 +331,47 @@ class WhisperAccessibilityService : AccessibilityService() {
         false
     }
 
-    /** True when a text box has the cursor even though the keyboard is closed (you closed it with Back). */
+    /**
+     * True when a text box has the cursor even though the keyboard is closed (you closed it with Back).
+     * Isaac (2026-11-16): off in Settings, or in an app where the button was dropped on the X,
+     * the button shows only with the keyboard open, as before 0.8.7.
+     */
     private fun textBoxFocused(): Boolean = try {
+        val p = prefs()
         val root = rootInActiveWindow
-        val node = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val hiddenHere = root?.packageName?.toString() in p.getStringSet(PREF_CURSOR_HIDDEN_APPS, emptySet())!!
+        val node = if (!p.getBoolean(PREF_SHOW_WITH_CURSOR, true) || hiddenHere) null
+                   else root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         val editable = node?.isEditable == true
         node?.recycle()
         root?.recycle()
         editable
     } catch (e: Exception) {
         false
+    }
+
+    /** The app under the button, so dropping it on the X hides it there. */
+    private fun activeAppPackage(): String? = try {
+        rootInActiveWindow?.let { r -> r.packageName?.toString().also { r.recycle() } }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun appLabel(pkg: String): String = try {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+    } catch (e: Exception) {
+        "this app"
+    }
+
+    /** Stops showing the button for the cursor alone in [pkg]; Settings brings it back. */
+    private fun hideInApp(pkg: String) {
+        val p = prefs()
+        val apps = p.getStringSet(PREF_CURSOR_HIDDEN_APPS, emptySet())!! + pkg
+        p.edit().putStringSet(PREF_CURSOR_HIDDEN_APPS, apps).apply()
+        Log.i(TAG, "Button hidden with the keyboard closed in $pkg")
+        showFeedback("Hidden in ${appLabel(pkg)} until the keyboard opens. Settings brings it back.", 3500)
+        handler.post { onStateChanged?.invoke() }
+        scheduleVisibilityUpdate()
     }
 
     private fun applyVisibility() {
@@ -425,6 +467,43 @@ class WhisperAccessibilityService : AccessibilityService() {
             y = screenH / 2 - ringSize / 2
         }
 
+        // The X at the bottom center that appears while you drag; dropping the button on it hides it
+        // in that app until the keyboard opens (Isaac, 2026-11-16).
+        val targetSize = (HIDE_TARGET_DP * dp).toInt()
+        val hideTarget = TextView(this).apply {
+            text = "✕"
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTextColor(0xFFFFFFFF.toInt())
+            background = circle(COLOR_HIDE_TARGET)
+            visibility = View.GONE
+        }
+        val targetParams = WindowManager.LayoutParams(
+            targetSize, targetSize,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = (HIDE_TARGET_BOTTOM_DP * dp).toInt()
+        }
+        var dragging = false
+        var overTarget = false
+        /** True when the finger is on the X (within one X width of its center). */
+        fun onTarget(rawX: Float, rawY: Float): Boolean {
+            if (hideTarget.visibility != View.VISIBLE) return false
+            val loc = IntArray(2)
+            hideTarget.getLocationOnScreen(loc)
+            val cx = loc[0] + targetSize / 2f
+            val cy = loc[1] + targetSize / 2f
+            return kotlin.math.hypot(rawX - cx, rawY - cy) < targetSize
+        }
+        fun endDrag() {
+            dragging = false
+            overTarget = false
+            hideTarget.visibility = View.GONE
+        }
+
         var startX = 0; var startY = 0
         var touchX = 0f; var touchY = 0f
         var discarded = false
@@ -456,6 +535,19 @@ class WhisperAccessibilityService : AccessibilityService() {
                     if (abs(ev.rawX - touchX) + abs(ev.rawY - touchY) >= TAP_THRESHOLD_DP * dp) {
                         handler.removeCallbacks(holdToDiscard)
                         handler.removeCallbacks(holdForYiddish)
+                        // The X shows only while idle with the cursor setting on; mid-recording the button stays.
+                        if (!dragging && state == State.IDLE && prefs().getBoolean(PREF_SHOW_WITH_CURSOR, true)) {
+                            dragging = true
+                            hideTarget.visibility = View.VISIBLE
+                        }
+                    }
+                    val nowOver = onTarget(ev.rawX, ev.rawY)
+                    if (nowOver != overTarget) {
+                        overTarget = nowOver
+                        hideTarget.background = circle(if (nowOver) COLOR_HIDE_TARGET_ON else COLOR_HIDE_TARGET)
+                        hideTarget.animate().scaleX(if (nowOver) 1.2f else 1f).scaleY(if (nowOver) 1.2f else 1f)
+                            .setDuration(100).start()
+                        if (nowOver) buzz()
                     }
                     params.x = startX + (ev.rawX - touchX).toInt()
                     params.y = startY + (ev.rawY - touchY).toInt()
@@ -470,10 +562,21 @@ class WhisperAccessibilityService : AccessibilityService() {
                     handler.removeCallbacks(holdToDiscard)
                     handler.removeCallbacks(holdForYiddish)
                     val moved = abs(ev.rawX - touchX) + abs(ev.rawY - touchY)
+                    val dropped = dragging && state == State.IDLE && onTarget(ev.rawX, ev.rawY)
+                    endDrag()
                     if (discarded || heldForYiddish) {
                         // The hold already discarded the recording or started a Yiddish take; this isn't a tap.
                     } else if (moved < TAP_THRESHOLD_DP * dp) {
                         onTap("button")
+                    } else if (dropped) {
+                        // Back where it was, so it's in its usual spot when the keyboard brings it back.
+                        params.x = startX; params.y = startY
+                        wm.updateViewLayout(v, params)
+                        feedbackLayoutParams?.let {
+                            positionFeedback(it, params)
+                            wm.updateViewLayout(feedbackView, it)
+                        }
+                        activeAppPackage()?.let { hideInApp(it) }
                     } else {
                         params.x = if (params.x + ringSize / 2 > screenW / 2)
                             screenW - ringSize - margin else margin
@@ -483,6 +586,12 @@ class WhisperAccessibilityService : AccessibilityService() {
                             wm.updateViewLayout(feedbackView, it)
                         }
                     }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(holdToDiscard)
+                    handler.removeCallbacks(holdForYiddish)
+                    endDrag()
                     true
                 }
                 else -> false
@@ -510,8 +619,11 @@ class WhisperAccessibilityService : AccessibilityService() {
         }
         positionFeedback(feedbackParams, params)
 
+        // Added first so the button is drawn above the X while you drag it there.
+        wm.addView(hideTarget, targetParams)
         wm.addView(overlay, params)
         wm.addView(feedback, feedbackParams)
+        hideTargetView = hideTarget
         overlayView = overlay
         button = img
         bars = levelBars
@@ -536,6 +648,10 @@ class WhisperAccessibilityService : AccessibilityService() {
         feedbackView?.let {
             wm.removeView(it)
             feedbackView = null
+        }
+        hideTargetView?.let {
+            wm.removeView(it)
+            hideTargetView = null
         }
         button = null
         bars = null
