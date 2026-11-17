@@ -32,7 +32,10 @@ Agreed scope, November 10, 2026: prepare launch assets and forms, publish the pr
 
 ## Testing and production
 
-- [ ] Create internal testing release for initial validation, then the required closed test if the account is subject to Google's new personal-account rule.
+- [~] Create internal testing release for initial validation, then the required closed test if the account is subject to Google's new personal-account rule.
+  - 2026-11-17: internal test live. 0.9.0 (versionCode 37) built from 49676f2 in a clean worktree (other tasks had uncommitted app edits), signed with the upload key (SHA-256 F6:13:90:...:08:99); Play App Signing holds the app key.
+    Testers: email list "Internal testers" (ynbsd6242@gmail.com). Join link: https://play.google.com/apps/internaltest/4701430978639891994
+    Play's automatic protection (installer check) was turned off: it needs minSdk 24 and the app supports Android 6 (minSdk 23).
 - [ ] Confirm the rule in the actual account. The previously identified rule is at least 12 opted-in testers continuously for 14 days; installation alone is not the stated criterion, and elapsed time alone does not guarantee production access.
 - [ ] Exercise microphone permission, Accessibility accept/decline, text insertion, shortcut, free-minute usage/exhaustion, own-key cloud route, Yiddish route/correction consent, offline fallback, and local history deletion.
 - [ ] Apply for production access after eligibility, with truthful test results and feedback. Google reviews the application.
