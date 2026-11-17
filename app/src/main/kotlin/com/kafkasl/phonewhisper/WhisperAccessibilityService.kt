@@ -47,12 +47,12 @@ class WhisperAccessibilityService : AccessibilityService() {
         private const val RING_DP = 56
         private const val FEEDBACK_OFFSET_DP = 64
 
-        // Isaac (2026-11-16): the idle button a bit more see-through (was 0xDD, 87%; now 0xAA, 67%).
-        private const val COLOR_IDLE = 0xAA1C1C1E.toInt()
-        private const val COLOR_HIDE_TARGET = 0xAA1C1C1E.toInt()
-        private const val COLOR_HIDE_TARGET_ON = 0xEE1C1C1E.toInt()
-        private const val HIDE_TARGET_DP = 56
-        private const val HIDE_TARGET_BOTTOM_DP = 48
+        // Isaac (2026-11-16): the idle button more see-through (was 0xDD, 87%; then 0xAA, 67%; now 0x77, 47%).
+        private const val COLOR_IDLE = 0x771C1C1E.toInt()
+        private const val COLOR_HIDE_TARGET = 0x551C1C1E.toInt()
+        private const val COLOR_HIDE_TARGET_ON = 0x991C1C1E.toInt()
+        private const val HIDE_TARGET_DP = 72
+        private const val HIDE_TARGET_BOTTOM_DP = 80
 
         /** Setting: show the button when a text box has the cursor, not only with the keyboard open. */
         const val PREF_SHOW_WITH_CURSOR = "show_with_cursor"
@@ -472,7 +472,7 @@ class WhisperAccessibilityService : AccessibilityService() {
         val targetSize = (HIDE_TARGET_DP * dp).toInt()
         val hideTarget = TextView(this).apply {
             text = "✕"
-            textSize = 22f
+            textSize = 28f
             gravity = Gravity.CENTER
             setTextColor(0xFFFFFFFF.toInt())
             background = circle(COLOR_HIDE_TARGET)
