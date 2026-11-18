@@ -117,14 +117,12 @@ class ShareActivity : AppCompatActivity() {
         val wav = WavWriter.encode(piece)
         if (!yiddish) { sendCloud(piece, wav); return }
         val install = YiddishServer.installId(this)
-        val (result, id) = YiddishServer.transcribeJob(wav, BuildConfig.VERSION_NAME, install, "app-share") { f ->
+        val result = YiddishServer.transcribeJob(wav, BuildConfig.VERSION_NAME, install, "app-share") { f ->
             ui { showProgress(done + (f * piece.size).toLong()) }
         }
         if (!result.text.isNullOrBlank()) {
             Analytics.track("transcribed", mapOf("model" to "yiddish-pc",
                 "seconds" to Math.round(piece.size / 3200.0) / 10.0, "backup_model" to false, "free_minutes" to false))
-            // Nothing is typed into a text box, so there are no edits to follow.
-            id?.let { YiddishServer.sendCorrection(it, null, "not_tracked", BuildConfig.VERSION_NAME, install, false) }
             ui { pieceDone(piece, result.text, "yiddish-pc") }
         } else if (YiddishServer.isOff(result)) {
             yiddish = false

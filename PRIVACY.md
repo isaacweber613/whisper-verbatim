@@ -18,11 +18,9 @@ OpenRouter and the model provider handle your audio under their own terms and pr
 
 ## Yiddish takes
 
-When Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC through a Cloudflare Worker. The recording, model text, and your later corrected words are kept on that PC for review and training to improve the Yiddish model. The app sends a random install ID and app version so takes from one installation can be grouped for training splits. The ID is not an account name, but voice and dictated words may themselves identify you. These takes currently have no automatic deletion schedule. The Play Store version shows this and asks you to agree before the first Yiddish recording; the versions from GitHub do not ask.
+When Yiddish is selected, holding the mic button or using the Yiddish shortcut sends that recording to a Yiddish speech model on the developer's PC through a Cloudflare Worker. The recording and the model text are kept on that PC for review and training to improve the Yiddish model. The app sends a random install ID and app version so takes from one installation can be grouped for training splits. The ID is not an account name, but voice and dictated words may themselves identify you. These takes currently have no automatic deletion schedule. The Play Store version shows this and asks you to agree before the first Yiddish recording; the versions from GitHub do not ask.
 
-After a Yiddish take, the app follows edits to that take's text box. When the text is sent, the screen changes, another recording starts, or two minutes pass, it sends the corrected words or an outcome such as unchanged or deleted. Text cut to less than half is treated as deleted and is not sent as a correction. Words added to the take's box may be included and are marked for review.
-
-With Yiddish selected, sharing an audio or video file asks if it is Yiddish. If you answer Yiddish, the file is sent, kept and used the same way as a Yiddish take, marked as a shared file. Nothing is typed into a text box, so no edits are followed.
+With Yiddish selected, sharing an audio or video file asks if it is Yiddish. If you answer Yiddish, the file is sent, kept and used the same way as a Yiddish take, marked as a shared file.
 
 To stop sending recordings for training, use a quick tap or the normal shortcut, or pick another language. This does not delete takes already sent. If the PC is unavailable, the recording uses the normal cloud model instead, through the free-minute server when applicable. A quick tap uses the normal cloud model without Yiddish training.
 
@@ -40,7 +38,7 @@ Word for Word uses Android's Accessibility service for two things:
 - Showing the floating dictation button while your keyboard is open.
 - Typing your dictated words into the text box you're in.
 
-To do this, the app looks at the focused text box and the text already in it, so it can add your words at the cursor and skip grey placeholder text. After a Yiddish take, it also watches that take's text box for edits and sends corrected words as described above. If you enable a keyboard shortcut, the service filters key events to detect your selected shortcut. The app does not collect other screen content for analytics. You can disable the service in Android's Accessibility settings.
+To do this, the app looks at the focused text box and the text already in it, so it can add your words at the cursor and skip grey placeholder text. It does not follow or send what you type or edit afterwards. If you enable a keyboard shortcut, the service filters key events to detect your selected shortcut. The app does not collect other screen content for analytics. You can disable the service in Android's Accessibility settings.
 
 ## Usage data
 

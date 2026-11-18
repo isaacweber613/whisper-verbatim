@@ -30,7 +30,7 @@ object YiddishServer {
     /** Pref: the person agreed to [DISCLOSURE]. */
     const val CONSENT = "yiddish_training_consent"
     const val DISCLOSURE = "Yiddish mode sends your recording through Cloudflare to a speech model on the developer's PC. " +
-        "The PC keeps the recording, the text, and your later corrections to that text to improve the Yiddish model, " +
+        "The PC keeps the recording and the text it typed to improve the Yiddish model, " +
         "with a random install ID and the app version. There is no automatic deletion. " +
         "If the PC is unavailable, your recording goes to OpenRouter and its speech provider instead, " +
         "through Word for Word's server when using free minutes. " +
@@ -68,11 +68,11 @@ object YiddishServer {
         result.code == 503 || (result.code == null && result.error != null)
 
     /**
-     * [callback] gets the result and the take's id on the PC (every Yiddish take is kept for training).
-     * [source] is saved with the take: "app" for dictation, "app-share" for an audio file shared to the app.
+     * Every Yiddish take is kept on the PC for training. [source] is saved with the take: "app" for
+     * dictation, "app-share" for an audio file shared to the app.
      */
     fun transcribe(wav: ByteArray, appVersion: String, install: String, source: String = "app",
-                   callback: (TranscriberClient.Result, String?) -> Unit) {
+                   callback: (TranscriberClient.Result) -> Unit) {
         val request = Request.Builder()
             .url("$BASE/api/transcribe")
             .header("x-password", PASSWORD)
@@ -82,15 +82,15 @@ object YiddishServer {
             .post(wav.toRequestBody("audio/wav".toMediaType()))
             .build()
         client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = callback(offline(e), null)
+            override fun onFailure(call: Call, e: IOException) = callback(offline(e))
 
             override fun onResponse(call: Call, response: Response) {
                 val body = response.body?.string() ?: ""
                 val json = try { JSONObject(body) } catch (_: Exception) { null }
                 if (response.isSuccessful && json != null) {
-                    callback(TranscriberClient.Result(json.optString("text", ""), null), json.optString("id").ifBlank { null })
+                    callback(TranscriberClient.Result(json.optString("text", ""), null))
                 } else {
-                    callback(failure(response.code, json), null)
+                    callback(failure(response.code, json))
                 }
             }
         })
@@ -104,7 +104,7 @@ object YiddishServer {
      * thread. [progress] gets how much of the file is typed out, 0 to 1, when the PC says.
      */
     fun transcribeJob(wav: ByteArray, appVersion: String, install: String, source: String,
-                      progress: (Double) -> Unit): Pair<TranscriberClient.Result, String?> {
+                      progress: (Double) -> Unit): TranscriberClient.Result {
         val start = Request.Builder()
             .url("$BASE/api/job")
             .header("x-password", PASSWORD)
@@ -117,10 +117,10 @@ object YiddishServer {
             client.newCall(start).execute().use { response ->
                 val json = try { JSONObject(response.body?.string() ?: "") } catch (_: Exception) { null }
                 json?.optString("job")?.takeIf { response.isSuccessful && it.isNotBlank() }
-                    ?: return failure(response.code, json) to null
+                    ?: return failure(response.code, json)
             }
         } catch (e: IOException) {
-            return offline(e) to null
+            return offline(e)
         }
         var wait = 3000L
         while (true) {
@@ -133,7 +133,7 @@ object YiddishServer {
             val json = try {
                 client.newCall(ask).execute().use { response ->
                     val json = try { JSONObject(response.body?.string() ?: "") } catch (_: Exception) { null }
-                    if (!response.isSuccessful || json == null) return failure(response.code, json) to null
+                    if (!response.isSuccessful || json == null) return failure(response.code, json)
                     json
                 }
             } catch (_: IOException) {
@@ -145,8 +145,8 @@ object YiddishServer {
                 if (json.has("progress")) progress(json.optDouble("progress"))
                 continue
             }
-            if (json.optString("error").isNotBlank()) return failure(500, json) to null
-            return TranscriberClient.Result(json.optString("text", ""), null) to json.optString("id").ifBlank { null }
+            if (json.optString("error").isNotBlank()) return failure(500, json)
+            return TranscriberClient.Result(json.optString("text", ""), null)
         }
     }
 
@@ -162,25 +162,4 @@ object YiddishServer {
         return TranscriberClient.Result(null, msg, code)
     }
 
-    /**
-     * Sends what happened to a take: the text the person ended up with, or just an outcome such as
-     * `sent_unchanged` or `cut_down` when there is no corrected text. [appended] marks words typed
-     * after the take in an empty box; training reviews those before using them.
-     */
-    fun sendCorrection(id: String, text: String?, outcome: String, appVersion: String, install: String,
-                       appended: Boolean) {
-        val body = JSONObject().put("id", id).put("outcome", outcome).put("appended", appended)
-        if (!text.isNullOrBlank()) body.put("text", text)
-        val request = Request.Builder()
-            .url("$BASE/api/correction")
-            .header("x-password", PASSWORD)
-            .header("x-app-version", appVersion)
-            .header("x-install", install)
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {}
-            override fun onResponse(call: Call, response: Response) { response.close() }
-        })
-    }
 }

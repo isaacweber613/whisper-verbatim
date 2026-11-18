@@ -61,9 +61,9 @@ GitHub builds don't:
 - A "Privacy policy" row in Settings. Play requires the policy inside the app.
 - A "Yiddish training" dialog with Agree / No thanks before the first Yiddish take or shared
   Yiddish file (`YiddishServer.needsConsent`). Play requires a disclosure and an Agree tap before
-  data is kept in a way people don't expect; recordings and edits kept for training qualify.
-- An Accessibility disclosure that says the text box's edits can go to the PC and doesn't claim
-  recordings go only to OpenRouter with your own key (free minutes go through the server).
+  data is kept in a way people don't expect; recordings kept for training qualify.
+- An Accessibility disclosure that says what the service reads (only the focused text box) and that
+  it never saves or shares it.
 
 Left out on purpose because the policy doesn't require them: a consent dialog for normal cloud
 dictation, and a settings row to turn Yiddish training off or copy an ID. Don't add them to any
@@ -121,9 +121,7 @@ be on; when it's off the Worker answers 503 and the take is kept for a retry.
 
 Since 0.8.2 (Isaac, 2026-11-08): when the PC is off (Worker 503, or the Worker can't be reached),
 a Yiddish take falls back to the normal model with Auto language and says so. Every Yiddish take is
-kept on the PC for training (D:/yiddish-stt/takes); if the person edits the typed words, the app
-follows that box (text-changed accessibility events) and, when the box is emptied in one step
-(sent), the screen changes, the next recording starts or 2 minutes pass, sends the edited words
-as the take's correct text. Words cut to under half count as deleted and are not sent. Debug
-builds: `am broadcast -a com.isaacweber.wordforword.DEBUG_DICTATE --es text "..." --es yiddishId <id>`
-tests this without audio. Never stop the PC model server to test (Isaac, 2026-11-08).
+kept on the PC for training (D:/yiddish-stt/takes). Since 0.9.3 (Isaac, 2026-11-17: "remove that
+part") the app no longer follows edits to a typed take or sends corrected words back; the
+service doesn't receive text-changed events at all. Debug builds:
+`am broadcast -a com.isaacweber.wordforword.DEBUG_DICTATE --es text "..."` types text without audio. Never stop the PC model server to test (Isaac, 2026-11-08).

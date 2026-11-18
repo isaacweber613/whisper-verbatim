@@ -566,18 +566,11 @@ class MainActivity : AppCompatActivity() {
         setupDialog = setupBuilder(1, "Accessibility")
             .setMessage(
                 "Word for Word uses Accessibility to show the mic button and type your words into the text box you're in. " +
-                // Google Play requires this text to say exactly what is read and where it goes. The
-                // Play build has free minutes and asks before Yiddish training, so its text differs.
-                (if (BuildConfig.FLAVOR == "play")
-                    "It reads the focused text box to insert words at the cursor. " +
-                    "If you separately agree to Yiddish training, it follows edits to the dictated text in that box " +
-                    "and sends the corrected words to the developer's PC through Cloudflare to improve the Yiddish model. " +
-                    "If you turn on the keyboard shortcut, it also watches for that key press. " +
-                    "It does not collect other screen content."
-                else
-                    "It reads only that text box, and never saves or shares it. " +
-                    "If you turn on the keyboard shortcut, it also watches for that key press. " +
-                    "Your recording goes only to OpenRouter, with your own key."))
+                // Google Play requires this text to say exactly what is read and where it goes.
+                // Isaac (2026-11-17): edits to a Yiddish take are no longer followed or sent anywhere.
+                "It reads only that text box, to put your words at the cursor, and never saves or shares what's in it. " +
+                "If you turn on the keyboard shortcut, it also watches for that key press. " +
+                "It does not collect other screen content.")
             .setPositiveButton("Agree") { _, _ ->
                 prefs().edit().putBoolean("acc_disclosure_agreed", true).apply()
                 showAccessibilityStep()
