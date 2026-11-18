@@ -12,7 +12,10 @@ Word for Word started as a fork of [kafkasl/phone-whisper](https://github.com/ka
 
 ## Install
 
-Download one of these from the [latest release](https://github.com/isaacweber613/whisper-verbatim/releases/latest)
+**Google Play:** [Word for Word on Google Play](https://play.google.com/store/apps/details?id=com.isaacweber.wordforword).
+It's in testing now, so this link opens once Google approves the app for everyone.
+
+Or download one of these from the [latest release](https://github.com/isaacweber613/whisper-verbatim/releases/latest)
 and open it on your phone:
 
 - **`WordForWord.apk`** (recommended). When an update is out, the app shows an Update row that downloads
