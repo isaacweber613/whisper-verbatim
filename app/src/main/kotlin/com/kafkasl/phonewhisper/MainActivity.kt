@@ -433,6 +433,16 @@ class MainActivity : AppCompatActivity() {
     private fun showAccessibilityStep() {
         // Google Play requires this disclosure, and a clear yes, before sending anyone to turn the service on.
         if (!prefs().getBoolean("acc_disclosure_agreed", false)) { showAccessibilityDisclosure(); return }
+        // Isaac (2026-11-17): Android doesn't block apps installed from Google Play, so the Play build
+        // skips the restricted-settings detour and goes straight to the switch.
+        if (BuildConfig.FLAVOR == "play") {
+            setupDialog = setupBuilder(1, "Accessibility")
+                .setMessage("Tap Word for Word, then turn it on.")
+                .setPositiveButton("Open Accessibility") { _, _ -> openAccessibilitySettings() }
+                .setNegativeButton("Later") { _, _ -> setupSnoozed = true }
+                .show()
+            return
+        }
         val phase = prefs().getInt("acc_setup_phase", 0)
         val b = setupBuilder(1, "Accessibility (part ${phase + 1} of 3)")
         when (phase) {
