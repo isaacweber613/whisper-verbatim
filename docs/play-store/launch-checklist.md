@@ -42,3 +42,9 @@ Agreed scope, November 10, 2026: prepare launch assets and forms, publish the pr
 - [ ] Submit production only after required approvals and Isaac's review of legal declarations. Verify actual availability before describing the app as launched.
 
 The existing GitHub APK release workflow remains separate from uploading the Play flavor. A store listing preparation change does not require a new APK release. Any subsequent app source change follows the repository's rule to release both GitHub APK flavors together.
+
+## 2026-11-17 evening: sent for review
+- Internal testing: 41 (0.9.4) live to the "Internal testers" list (ynbsd6242@gmail.com, moshemoloch@gmail.com).
+- Accessibility declaration saved: App functionality, no personal data collected through it, video https://youtu.be/8SB5J919WO0 (unlisted, 53 s, Play build 0.9.4, narrated).
+- Closed testing - Alpha: 41 (0.9.4), 142 countries plus Rest of World (EEA, UK, Russia, Belarus, Indonesia, Vietnam removed), testers = "Internal testers" list. A public Google Group "wordforwordtesters" is not created yet (Google Groups wanted a CAPTCHA a person must tick).
+- All 14 changes submitted for review with Isaac's OK ("Yeah send it"). Managed publishing is off, so the closed test goes live when Google approves.
